@@ -1,0 +1,33 @@
+{
+  "full": {
+    "file": "skaven-techno-lasers.32vid",
+    "bytes": 14119068,
+    "video_frames": 1463,
+    "audio_seconds": 209.0,
+    "columns": 143,
+    "rows": 52,
+    "fps": 7,
+    "sha256": "6902a94026ba123964e2ca40869c05bb9d2b120242e29b8e7321492e7637f3ad"
+  },
+  "source_id": "TXCUenE0b5A",
+  "source_title": "SKAVEN TECHNO LASERS / Francis E Dec Remix",
+  "source_channel": "Karl the Deranged",
+  "source_start_seconds": 0,
+  "assumed_wall_blocks": [
+    7,
+    4
+  ],
+  "test_hosted": false,
+  "source_url": "https://www.youtube.com/watch?v=TXCUenE0b5A",
+  "download_url": "https://craftoria-video-player.raftoria.workers.dev/videos/skaven-techno-lasers.32vid",
+  "validation": {
+    "samples": 10032000,
+    "blits": 76076,
+    "retries": 7,
+    "accepted_chunks": 418,
+    "file_closed": true,
+    "file": "skaven-techno-lasers.32vid",
+    "mode": "file fixture"
+  },
+  "public_download_sha256_verified": true
+}
