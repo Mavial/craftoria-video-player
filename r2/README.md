@@ -10,6 +10,8 @@ The bucket is bound to the Worker as `VIDEOS`. The Worker exposes only GET/HEAD 
 
 Upload a new converted recording under `videos/`, then click Refresh on the monitor:
 
+For a YouTube URL or local MP4, the [automatic uploader](../UPLOADING.md) handles downloading, conversion, upload and checksum verification for you. The command below is for files already converted to `.32vid`.
+
 ```powershell
 npx wrangler r2 object put "craftoria-video-player/videos/example.32vid" --file "C:\path\example.32vid" --content-type application/octet-stream --remote
 ```

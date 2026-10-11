@@ -41,6 +41,8 @@ Use `peripherals` to discover the monitor name. The ten-second test clip has bee
 
 ## Available recordings
 
+To add your own videos, use the [automatic uploader](UPLOADING.md). On the configured PC, run `python .\video-player\upload_video.py "YOUTUBE_URL"` from the Craftoria workspace, then click Refresh on the monitor.
+
 Click Refresh in the menu to see the current library. It includes Wii Shop Bling and [SKAVEN TECHNO LASERS / Francis E Dec Remix](https://www.youtube.com/watch?v=TXCUenE0b5A), uploaded by Karl the Deranged. The Skaven recording starts at the beginning, runs 3:29 at 7 FPS with audio, and is 14,119,068 bytes. Its [conversion and validation record](recordings/skaven-techno-lasers.json) includes the checksum verified against the public R2 download.
 
 ## Recording and hardware

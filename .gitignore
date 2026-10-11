@@ -1,2 +1,7 @@
 r2/.wrangler/
 r2/.build/
+uploads/
+tools/
+node_modules/
+upload-video.local.json
+__pycache__/
