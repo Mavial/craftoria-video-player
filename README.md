@@ -37,11 +37,7 @@ For a new computer, download the player first:
 wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-r2.lua
 ```
 
-Use `peripherals` to discover the monitor name. The test clip is available at:
-
-```text
-monitor MONITOR_NAME video-r2.lua https://craftoria-video-player.raftoria.workers.dev/videos/wii-shop-bling-test.32vid
-```
+Use `peripherals` to discover the monitor name. The ten-second test clip has been removed from R2 and GitHub; click Refresh in the menu to update the list.
 
 ## Recording and hardware
 
@@ -51,7 +47,7 @@ The recording uses **7 FPS**, 286x156 subpixels (143 columns x 52 rows at text s
 
 Use 28 joined Advanced Monitors, one dedicated Advanced Computer and one connected Speaker. The computer may touch the wall directly or connect over wired modems and Networking Cable. HTTP playback avoids writing the full recording to the computer disk. The server must permit the configured R2 Worker hostname.
 
-Release assets contain the full recording, a ten-second test and SHA-256 checksums. `manifest.json` records exact dimensions, frame count, duration and file hashes. `verification.json` records simulated file/HTTP playback, monitor output and Speaker backpressure checks. `menu-verification.json` records menu checks with the installed CC:Tweaked scheduler and monitor program, covering clicks, keyboard selection, pagination, refresh, errors, stopping, replay and audio state, plus the live public GitHub and R2 libraries. The Worker checks cover catalogue pagination, exact download bytes, metadata, and route restrictions. The earlier player and wall were confirmed in-world; the new menu still needs an in-world check.
+The full recording is available through R2 and the GitHub release. The test clip was removed; its original conversion and validation records remain as historical metadata. `manifest.json` records exact dimensions, frame count, duration and file hashes. `verification.json` records simulated file/HTTP playback, monitor output and Speaker backpressure checks. `menu-verification.json` records menu checks with the installed CC:Tweaked scheduler and monitor program, covering clicks, keyboard selection, pagination, refresh, errors, stopping, replay and audio state, plus the live public GitHub and R2 libraries. The Worker checks cover catalogue pagination, exact download bytes, metadata, and route restrictions. The R2 menu and player were confirmed working in-world by the user.
 
 ## Upstream and licensing
 
