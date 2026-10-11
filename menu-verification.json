@@ -7,7 +7,7 @@
     "Empty library and malformed GitHub responses",
     "Invalid recording recovery and Ctrl+T cleanup",
     "Automatic wall selection, scale setup, colour/size filtering, isolated monitor touches and terminal restoration",
-    "Explicit monitor setting and invalid/disconnected setting recovery",
+    "Explicit monitor setting and automatic recovery from invalid/disconnected settings",
     "Legacy ROM monitor launch keeps its display, configures scale, and converts each touch once",
     "Automatic monitor termination/disconnection closes playback and restores the computer terminal",
     "Small walls show the menu and report actual recording dimensions without cropping",

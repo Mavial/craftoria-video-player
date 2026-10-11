@@ -1,0 +1,17 @@
+{
+  "model": "Installed CC:Tweaked scheduler, monitor program and real DFPWM decoder; simulated hardware and HTTP, not in-world measurements.",
+  "passed": [
+    "All settings tabs and paginated controls stay in bounds at 36x12, 51x19, 71x26 and 143x52",
+    "Volume touch edges, Cancel, staged Defaults, Save and playback volume",
+    "Mute keeps picture playback and suppresses audio without sending zero-volume streams",
+    "Touch-stop disabled ignores taps during playback; Backspace still stops",
+    "Detected monitor selection persists, switches the active screen, and applies menu text size",
+    "Save failure rolls back settings and keeps the draft for retry",
+    "Computer keyboard URL entry, terminal restoration, HTTPS and catalogue validation before Save",
+    "Startup looping uses the persisted URL; missing videos return to the library; selections are remembered",
+    "Automatic refresh runs in the library, pauses during playback/settings, and rearms on return",
+    "All-speaker playback sends complete matching audio and volume; busy/detached outputs do not block others",
+    "Chosen-speaker routing and stop/Ctrl+T cleanup of every selected output",
+    "Rescan/test actions use draft speaker choices; muted tests stay silent"
+  ]
+}

@@ -11,12 +11,70 @@ end
 local file, speaker
 local originalTerminal = term.current()
 local activeMonitor, ownsMonitor = nil, false
+local restoreScreen
+local outputs, startupNotice = {}, nil
+local configDefaults = {volume = 1, muted = false, speakers = "auto", speaker = "",
+    monitor = "", scale = "auto", columns = 0, touchStop = true, startup = "menu", refresh = 0,
+    r2_url = DEFAULT_R2_URL}
+local configKeys = {volume = "video.volume", muted = "video.muted", speakers = "video.speakers",
+    speaker = "video.speaker", monitor = "video.monitor", scale = "video.menu_scale",
+    columns = "video.columns", touchStop = "video.touch_stop", startup = "video.startup",
+    refresh = "video.refresh_minutes", r2_url = "video.r2_url"}
+local function copy(value) local result = {}; for key, item in pairs(value) do result[key] = item end; return result end
+local function readConfig()
+    local result = copy(configDefaults)
+    for key, name in pairs(configKeys) do
+        local value = settings.get(name)
+        if value ~= nil and type(value) == type(result[key]) then result[key] = value end
+    end
+    result.volume = result.volume == result.volume and math.max(0, math.min(3, result.volume)) or 1
+    if result.speakers ~= "auto" and result.speakers ~= "all" and result.speakers ~= "chosen" then result.speakers = "auto" end
+    if result.scale ~= "auto" and result.scale ~= "0.5" and result.scale ~= "1" and result.scale ~= "1.5" then result.scale = "auto" end
+    if result.columns ~= 0 and result.columns ~= 2 and result.columns ~= 3 and result.columns ~= 4 then result.columns = 0 end
+    if result.startup ~= "loop" then result.startup = "menu" end
+    if result.refresh ~= 5 and result.refresh ~= 15 and result.refresh ~= 60 then result.refresh = 0 end
+    return result
+end
+local config = readConfig()
+local function saveValues(values)
+    local previous = {}
+    for name, value in pairs(values) do previous[name] = settings.get(name); settings.set(name, value) end
+    local ok, result = pcall(settings.save)
+    if ok and result ~= false then return true end
+    for name in pairs(values) do
+        if previous[name] == nil then settings.unset(name) else settings.set(name, previous[name]) end
+    end
+    if not ok and tostring(result) == "Terminated" then error(result, 0) end
+    return false, ok and "Could not write computer settings." or tostring(result)
+end
+local function speakerDevices()
+    local devices = {}
+    for _, name in ipairs(peripheral.getNames()) do
+        if peripheral.getType(name) == "speaker" then devices[#devices + 1] = {name = name, device = peripheral.wrap(name)} end
+    end
+    table.sort(devices, function(a, b) return a.name < b.name end)
+    return devices
+end
+local function selectOutputs()
+    local devices = speakerDevices()
+    if config.muted or config.volume == 0 then return {} end
+    if config.speakers == "all" then return devices end
+    if config.speakers == "chosen" then
+        for _, output in ipairs(devices) do if output.name == config.speaker then return {output} end end
+        -- Recover a disconnected selection without making the settings UI inaccessible.
+        startupNotice = "Chosen speaker missing; using automatic output."
+    end
+    return devices[1] and {devices[1]} or {}
+end
+local function stopOutputs()
+    for _, output in ipairs(outputs) do pcall(output.device.stop) end
+end
 
-local function setupMonitor()
+local function setupMonitor(configured, force)
     -- An explicit ROM "monitor <name> ..." launch keeps its chosen display and
     -- touch conversion. Direct launches select and redirect a display here.
     local wrapped, currentName = pcall(peripheral.getName, originalTerminal)
-    if wrapped and peripheral.getType(currentName) == "monitor" then
+    if not force and wrapped and peripheral.getType(currentName) == "monitor" then
         if not originalTerminal.isColor() then error("Video playback needs an Advanced Monitor.", 0) end
         originalTerminal.setTextScale(0.5)
         originalTerminal.setCursorBlink(false)
@@ -24,14 +82,16 @@ local function setupMonitor()
         return
     end
 
-    local selected, configured = nil, settings.get("video.monitor")
+    configured = configured == nil and config.monitor or configured
+    local selected
     if configured ~= nil and configured ~= "" then
-        if type(configured) ~= "string" or peripheral.getType(configured) ~= "monitor" then
-            error("video.monitor is not connected. Use 'set video.monitor nil' to enable automatic selection.", 0)
+        if peripheral.getType(configured) == "monitor" and peripheral.wrap(configured).isColor() then
+            selected = {name = configured, monitor = peripheral.wrap(configured)}
+        else
+            startupNotice = "Chosen monitor missing or not advanced; using automatic display."
         end
-        selected = {name = configured, monitor = peripheral.wrap(configured)}
-        if not selected.monitor.isColor() then error("video.monitor must name an Advanced Monitor.", 0) end
-    else
+    end
+    if not selected then
         local candidates = {}
         for _, name in ipairs(peripheral.getNames()) do
             if peripheral.getType(name) == "monitor" then
@@ -65,10 +125,14 @@ local function setupMonitor()
         selected = selected or candidates[1]
     end
     if selected then
+        if force then pcall(restoreScreen) end
         selected.monitor.setTextScale(0.5)
         activeMonitor, ownsMonitor = selected.name, true
         term.redirect(selected.monitor)
         term.setCursorBlink(false)
+    elseif force then
+        activeMonitor, ownsMonitor = nil, false
+        term.redirect(originalTerminal)
     end
 end
 
@@ -135,8 +199,8 @@ local function cataloguePages(url)
     return items
 end
 
-local function loadLibrary()
-    local source = r2URL()
+local function loadLibrary(source)
+    source = source == nil and r2URL() or source
     if source ~= "" then
         if type(source) ~= "string" or not source:match("^https://[^/]+") then
             error("video.r2_url must be an HTTPS catalogue URL", 0)
@@ -188,7 +252,7 @@ local function loadLibrary()
     return videos
 end
 
-local function restoreScreen()
+restoreScreen = function()
     for i = 0, 15 do term.setPaletteColor(2^i, term.nativePaletteColor(2^i)) end
     term.setBackgroundColor(colors.black)
     term.setTextColor(colors.white)
@@ -197,8 +261,8 @@ local function restoreScreen()
 end
 
 local function play(path)
-    local decodeAudio = dfpwm.make_decoder()
-    speaker = peripheral.find "speaker"
+    outputs = selectOutputs()
+    speaker = outputs[1] and outputs[1].device
     if path:match "^https?://" then
         local response, message, failed = http.get(path, nil, true)
         if failed then failed.close() end
@@ -481,10 +545,17 @@ local function play(path)
         end
     end
 
-    local function playAudio()
+    local function playAudio(output)
+        local decodeAudio = dfpwm.make_decoder()
         local raw = bit32_band(flags, 12) == 0
         local chunkSize = raw and 131072 or 16384
-        local speakerName = peripheral.getName(speaker)
+        local function waitForBuffer()
+            while true do
+                local event, name = os.pullEvent()
+                if peripheral.getType(output.name) ~= "speaker" then return false end
+                if event == "speaker_audio_empty" and name == output.name then return true end
+            end
+        end
         for offset = 1, #audioData, chunkSize do
             local encoded = audioData:sub(offset, offset + chunkSize - 1)
             local chunk
@@ -494,21 +565,33 @@ local function play(path)
             else
                 chunk = decodeAudio(encoded)
             end
-            while not speaker.playAudio(chunk) do
-                repeat local _, name = os.pullEvent("speaker_audio_empty") until name == speakerName
+            while true do
+                local ok, accepted = pcall(output.device.playAudio, chunk, config.volume)
+                if not ok then
+                    if peripheral.getType(output.name) ~= "speaker" then return end
+                    error(accepted, 0)
+                end
+                if accepted then break end
+                if not waitForBuffer() then return end
             end
             start = start or os.epoch "utc"
         end
         -- Buffer-empty means "room for another packet", not audible completion.
         -- Wait for the final pending packet to be dispatched, then let it drain.
         if #audioData > 0 then
-            repeat local _, name = os.pullEvent("speaker_audio_empty") until name == speakerName
+            if not waitForBuffer() then return end
             local lastSize = (#audioData - 1) % chunkSize + 1
             sleep(lastSize * (raw and 1 or 8) / 48000 + 0.5)
         end
     end
     if speaker and #audioData > 0 then
-        parallel.waitForAll(playAudio, renderVideo)
+        local workers = {}
+        for _, output in ipairs(outputs) do
+            local chosen = output
+            workers[#workers + 1] = function() playAudio(chosen) end
+        end
+        workers[#workers + 1] = renderVideo
+        parallel.waitForAll(table.unpack(workers))
     else
         renderVideo()
     end
@@ -530,7 +613,7 @@ local function runPlayback(path, canStop, loopVideo)
             end, function()
                 while true do
                     local event, value = inputEvent()
-                    if (event == "key" and value == keys.backspace) or event == "mouse_click" then
+                    if (event == "key" and value == keys.backspace) or (event == "mouse_click" and config.touchStop) then
                         stopped = true
                         return
                     end
@@ -541,7 +624,7 @@ local function runPlayback(path, canStop, loopVideo)
         end
     end)
     closeInput()
-    if speaker and (stopped or not ok) then pcall(speaker.stop) end
+    if stopped or not ok then stopOutputs() end
     local restored, restoreError = pcall(restoreScreen)
     if not ok and tostring(message) == "Terminated" then error(message, 0) end
     if not restored then error(not ok and message or restoreError, 0) end
@@ -558,9 +641,11 @@ local function menu()
     }
     local function chooseMenuScale()
         if activeMonitor then
-            setDisplayScale(1)
+            local requested = tonumber(config.scale) or 1
+            setDisplayScale(requested)
             local width, height = term.getSize()
-            menuScale = width >= 51 and height >= 19 and 1 or 0.5
+            menuScale = config.scale == "auto" and (width >= 51 and height >= 19 and 1 or 0.5)
+                or (width >= 36 and height >= 12 and requested or 0.5)
             setDisplayScale(menuScale)
         end
     end
@@ -606,6 +691,11 @@ local function menu()
         center(2, math.max(4, math.floor(height / 2) + 2), width - 2, detail, colors.lightGray)
     end
     chooseMenuScale()
+    local refreshTimer
+    local function scheduleRefresh()
+        if refreshTimer then os.cancelTimer(refreshTimer) end
+        refreshTimer = config.refresh > 0 and os.startTimer(config.refresh * 60) or nil
+    end
     local function refresh()
         busy("SYNCING LIBRARY", "Checking for new recordings...")
         local ok, result = pcall(loadLibrary)
@@ -618,8 +708,268 @@ local function menu()
             status = "Refresh failed: " .. tostring(result)
             statusColor = colors.orange
         end
+        scheduleRefresh()
     end
+    local function settingsScreen()
+        local draft, tab, focused, sectionPage = copy(config), 1, 1, 1
+        local tabs = {"AUDIO", "DISPLAY", "PLAYBACK", "LIBRARY"}
+        local notice, noticeColor = "Changes apply when you save.", colors.lightGray
+        local discoveredSpeakers, discoveredMonitors
+        local function rescan()
+            discoveredSpeakers, discoveredMonitors = speakerDevices(), {}
+            for _, name in ipairs(peripheral.getNames()) do
+                if peripheral.getType(name) == "monitor" and peripheral.wrap(name).isColor() then
+                    discoveredMonitors[#discoveredMonitors + 1] = name
+                end
+            end
+            table.sort(discoveredMonitors)
+        end
+        rescan()
+        local function changed() notice, noticeColor = "Unsaved changes.", colors.orange end
+        local function cycle(options, value, direction)
+            local index = 1
+            for i, item in ipairs(options) do if item == value then index = i; break end end
+            return options[(index - 1 + (direction or 1)) % #options + 1]
+        end
+        local function selectSpeaker(direction)
+            local options = {"auto", "all"}
+            for _, output in ipairs(discoveredSpeakers) do options[#options + 1] = output.name end
+            local value = cycle(options, draft.speakers == "chosen" and draft.speaker or draft.speakers, direction)
+            draft.speakers = (value == "auto" or value == "all") and value or "chosen"
+            draft.speaker = draft.speakers == "chosen" and value or ""
+            changed()
+        end
+        local function rescanAction()
+            rescan()
+            notice, noticeColor = #discoveredSpeakers .. " speakers, " .. #discoveredMonitors .. " advanced monitors.", colors.lightGray
+        end
+        local function testSpeaker()
+            if draft.muted or draft.volume == 0 then notice, noticeColor = "Unmute or increase the volume to test.", colors.orange; return end
+            local tested = 0
+            for index, output in ipairs(discoveredSpeakers) do
+                if draft.speakers == "all" or (draft.speakers == "auto" and index == 1)
+                    or (draft.speakers == "chosen" and output.name == draft.speaker) then
+                    local ok, accepted = pcall(output.device.playNote, "harp", draft.volume, 12)
+                    if ok and accepted then tested = tested + 1 end
+                end
+            end
+            notice, noticeColor = tested > 0 and ("Test tone sent to " .. tested .. " speaker(s).") or "No available speaker accepted the test.",
+                tested > 0 and colors.lightGray or colors.orange
+        end
+        local function editSource()
+            notice = "Enter the catalogue URL on the computer."
+            local previous = term.current()
+            term.redirect(term.native())
+            local ok, value = pcall(function()
+                term.setBackgroundColor(colors.black); term.setTextColor(colors.white); term.clear(); term.setCursorPos(1, 1)
+                print("HTTPS catalogue URL (blank keeps current):")
+                return read(nil, nil, nil, draft.r2_url)
+            end)
+            term.redirect(previous)
+            if not ok then error(value, 0) end
+            if value ~= "" then draft.r2_url = value; changed() else notice = "Catalogue URL unchanged." end
+        end
+        local function saveDraft()
+            if draft.r2_url ~= "" and not draft.r2_url:match("^https://[^/%s]+[^%s]*$") then
+                notice, noticeColor = "Use a valid HTTPS catalogue URL.", colors.orange; return false
+            end
+            if draft.monitor ~= "" and (peripheral.getType(draft.monitor) ~= "monitor" or not peripheral.wrap(draft.monitor).isColor()) then
+                notice, noticeColor = "Chosen advanced monitor is disconnected. Rescan or choose Auto.", colors.orange; return false
+            end
+            if draft.speakers == "chosen" and peripheral.getType(draft.speaker) ~= "speaker" then
+                notice, noticeColor = "Chosen speaker is disconnected. Rescan or choose Auto.", colors.orange; return false
+            end
+            local newVideos
+            if draft.r2_url ~= config.r2_url then
+                busy("CHECKING CATALOGUE", "Validating the new video source...")
+                local ok, result = pcall(loadLibrary, draft.r2_url)
+                if not ok then
+                    if tostring(result) == "Terminated" then error(result, 0) end
+                    notice, noticeColor = "Source rejected: " .. tostring(result), colors.orange; return false
+                end
+                newVideos = result
+            end
+            local values = {}
+            for key, name in pairs(configKeys) do values[name] = draft[key] end
+            local saved, failure = saveValues(values)
+            if not saved then notice, noticeColor = "Save failed: " .. failure, colors.orange; return false end
+            local oldMonitor = config.monitor
+            config = copy(draft)
+            if oldMonitor ~= config.monitor then setupMonitor(config.monitor, true) end
+            chooseMenuScale()
+            if newVideos then videos, selected, page = newVideos, 1, 1 end
+            status, statusColor = "Settings saved.", colors.lightGray
+            scheduleRefresh()
+            return true
+        end
+        while true do
+            setDisplayScale(menuScale)
+            local width, height = term.getSize()
+            local stride = height >= 24 and 3 or 2
+            local capacity = math.max(1, math.floor((height - 10) / stride))
+            local controls = {}
+            local function row(label, value, detail, action, special)
+                controls[#controls + 1] = {label = label, value = value, detail = detail, action = action, special = special}
+            end
+            if tab == 1 then
+                row("VOLUME", string.format("%.2f", draft.volume), "Normal 1.0 / maximum 3.0", function(direction)
+                    draft.volume = math.max(0, math.min(3, draft.volume + 0.25 * (direction or 1))); changed()
+                end, "volume")
+                row("MUTE", draft.muted and "ON" or "OFF", "Keeps your chosen volume", function() draft.muted = not draft.muted; changed() end)
+                row("SPEAKER OUTPUT", draft.speakers == "auto" and "AUTO / FIRST" or draft.speakers == "all" and "ALL CONNECTED" or draft.speaker,
+                    #discoveredSpeakers .. " connected; tap to cycle", selectSpeaker)
+                row("CHECK SPEAKERS", "RESCAN / TEST", "Test uses unsaved audio choices", rescanAction, "speakers")
+            elseif tab == 2 then
+                row("MONITOR", draft.monitor == "" and "AUTO / LARGEST" or draft.monitor, "Tap to cycle connected displays", function(direction)
+                    local options = {""}; for _, name in ipairs(discoveredMonitors) do options[#options + 1] = name end
+                    draft.monitor = cycle(options, draft.monitor, direction); changed()
+                end)
+                row("MENU TEXT SIZE", draft.scale == "auto" and "AUTO" or draft.scale, "Playback always uses scale 0.5", function(direction)
+                    -- Restrict choices to scales that still fit a usable menu.
+                    local options = {"auto"}
+                    local display = (draft.monitor ~= "" and peripheral.wrap(draft.monitor)) or term.current()
+                    if display and display.getTextScale then
+                        local scale = display.getTextScale(); local w, h = display.getSize()
+                        for _, option in ipairs({"0.5", "1", "1.5"}) do
+                            if math.floor(w * scale / tonumber(option)) >= 36 and math.floor(h * scale / tonumber(option)) >= 12 then options[#options + 1] = option end
+                        end
+                    end
+                    draft.scale = cycle(options, draft.scale, direction); changed()
+                end)
+                row("VIDEO GRID", draft.columns == 0 and "AUTO" or draft.columns .. " COLUMNS", "Layouts adapt to available width", function(direction)
+                    local options = {0}
+                    local display = (draft.monitor ~= "" and peripheral.wrap(draft.monitor)) or term.current()
+                    local w, h = display.getSize()
+                    if activeMonitor or draft.monitor ~= "" then
+                        local scale = display.getTextScale()
+                        local desired = tonumber(draft.scale) or ((w * scale >= 51 and h * scale >= 19) and 1 or 0.5)
+                        w = math.floor(w * scale / desired)
+                    end
+                    for count = 2, 4 do if w - 4 >= 18 * count + 2 * (count - 1) then options[#options + 1] = count end end
+                    draft.columns = cycle(options, draft.columns, direction); changed()
+                end)
+                row("CONNECTED DISPLAYS", "RESCAN", #discoveredMonitors .. " advanced monitors", rescanAction)
+            elseif tab == 3 then
+                row("TAP VIDEO TO STOP", draft.touchStop and "ON" or "OFF", "Backspace always stops playback", function() draft.touchStop = not draft.touchStop; changed() end)
+                row("WHEN PLAYER STARTS", draft.startup == "loop" and "LOOP LAST VIDEO" or "SHOW LIBRARY", "Runs after launch or startup.lua", function()
+                    draft.startup = draft.startup == "menu" and "loop" or "menu"; changed()
+                end)
+                row("CARD ACTIONS", "PLAY / LOOP", "Play once / repeat until stopped")
+                row("LAST VIDEO", settings.get("video.last_title") or "NONE YET", "Missing recording returns to library")
+            else
+                local rates = {[0] = "OFF / MANUAL", [5] = "5 MINUTES", [15] = "15 MINUTES", [60] = "1 HOUR"}
+                row("AUTOMATIC REFRESH", rates[draft.refresh], "Checks only while in the library", function(direction)
+                    draft.refresh = cycle({0, 5, 15, 60}, draft.refresh, direction); changed()
+                end)
+                row("CATALOGUE URL", "EDIT ON COMPUTER", draft.r2_url, editSource)
+                row("SOURCE", draft.r2_url ~= "" and "R2 CATALOGUE" or "GITHUB", "New URLs are checked before saving")
+                row("DOWNLOAD LIMIT", "64 MiB", "Configured on the dedicated server")
+            end
+            focused = math.max(1, math.min(focused, #controls))
+            sectionPage = math.floor((focused - 1) / capacity) + 1
+            local pages = math.ceil(#controls / capacity)
+            theme()
+            fill(1, 1, width, 2, colors.blue)
+            center(1, 1, width, "VIDEO LIBRARY / SETTINGS", colors.white, colors.blue)
+            writeAt(3, 2, tabs[tab] .. (pages > 1 and (" " .. sectionPage .. "/" .. pages) or ""), colors.cyan, colors.blue)
+            local targets = {}
+            local function button(x, y, w, text, background, action, h)
+                h = h or 2
+                fill(x, y, w, h, background)
+                center(x, y, w, text, (background == colors.cyan or background == colors.green) and colors.black or colors.white, background)
+                targets[#targets + 1] = {x = x, y = y, w = w, h = h, action = action}
+            end
+            if pages > 1 then
+                button(width - 12, 2, 5, "<", colors.blue, function() focused = math.max(1, focused - capacity) end, 1)
+                button(width - 6, 2, 5, ">", colors.blue, function() focused = math.min(#controls, focused + capacity) end, 1)
+            end
+            local tabWidth = math.floor((width - 4 - 3) / 4)
+            for index, name in ipairs(tabs) do
+                local chosenTab = index
+                button(3 + (index - 1) * (tabWidth + 1), 3, tabWidth, name, index == tab and colors.cyan or colors.blue,
+                    function() tab, focused = chosenTab, 1 end, 1)
+            end
+            local controlWidth = math.min(29, math.max(15, math.floor(width * 0.43)))
+            local controlX = width - controlWidth - 2
+            local first = (sectionPage - 1) * capacity + 1
+            for index = first, math.min(#controls, first + capacity - 1) do
+                local item = controls[index]
+                local y = 5 + (index - first) * stride
+                local rowIndex = index
+                writeAt(3, y, bounded(item.label, controlX - 4), index == focused and colors.cyan or colors.white)
+                if stride == 3 then writeAt(3, y + 1, bounded(tostring(item.detail or ""), controlX - 4), colors.lightGray) end
+                local background = item.action and (index == focused and colors.cyan
+                    or (stride == 2 and index % 2 == 1 and colors.gray or colors.blue)) or colors.gray
+                if item.special == "volume" then
+                    button(controlX, y, 4, "-", colors.blue, function() focused = rowIndex; item.action(-1) end)
+                    center(controlX + 5, y, controlWidth - 10, item.value, colors.white)
+                    button(controlX + controlWidth - 4, y, 4, "+", colors.cyan, function() focused = rowIndex; item.action(1) end)
+                elseif item.special == "speakers" then
+                    local w = math.floor((controlWidth - 1) / 2)
+                    button(controlX, y, w, "RESCAN", colors.blue, rescanAction)
+                    button(controlX + w + 1, y, controlWidth - w - 1, "TEST", colors.cyan, testSpeaker)
+                else
+                    button(controlX, y, controlWidth, tostring(item.value), background, function()
+                        focused = rowIndex; if item.action then item.action(1) end
+                    end)
+                end
+            end
+            fill(3, height - 4, width - 4, 1, colors.blue)
+            writeAt(4, height - 4, bounded(notice:gsub("[%c]", " "), width - 6), noticeColor, colors.blue)
+            local exiting, saving = false, false
+            local footerWidth = math.min(13, math.floor((width - 6) / 3))
+            local footerX = math.floor((width - (footerWidth * 3 + 2)) / 2) + 1
+            button(footerX, height - 2, footerWidth, "CANCEL", colors.blue, function() exiting = true end)
+            button(footerX + footerWidth + 1, height - 2, footerWidth, "DEFAULTS", colors.blue, function() draft = copy(configDefaults); changed() end)
+            button(footerX + (footerWidth + 1) * 2, height - 2, footerWidth, footerWidth >= 11 and "SAVE & BACK" or "SAVE", colors.cyan, function() saving = true end)
+            center(1, height, width, "Arrows adjust | Enter | Esc back", colors.lightGray)
+            local event, a, b, c = inputEvent()
+            if event == "mouse_click" then
+                for _, box in ipairs(targets) do
+                    if b >= box.x and b < box.x + box.w and c >= box.y and c < box.y + box.h then box.action(); break end
+                end
+            elseif event == "key" then
+                if a == keys.escape or a == keys.backspace then exiting = true
+                elseif a == keys.tab then tab, focused = tab % 4 + 1, 1
+                elseif a == keys.up then focused = math.max(1, focused - 1)
+                elseif a == keys.down then focused = math.min(#controls, focused + 1)
+                elseif a == keys.pageUp then focused = math.max(1, focused - capacity)
+                elseif a == keys.pageDown then focused = math.min(#controls, focused + capacity)
+                elseif a == keys.left or a == keys.right or a == keys.enter then
+                    if controls[focused].action then controls[focused].action(a == keys.left and -1 or 1) end
+                end
+            elseif event == "char" then
+                if a:lower() == "s" then saving = true
+                elseif a:lower() == "q" then exiting = true end
+            elseif (event == "monitor_resize" and a == activeMonitor) or event == "term_resize" then
+                chooseMenuScale()
+            end
+            if saving and saveDraft() then return end
+            if exiting then status, statusColor = "Settings cancelled.", colors.lightGray; scheduleRefresh(); return end
+        end
+    end
+    local function playChosen(index, loopVideo)
+        selected = index
+        local video = videos[index]
+        local remembered = saveValues({["video.last_url"] = video.url, ["video.last_title"] = video.title})
+        busy(loopVideo and "LOADING LOOP - BACKSPACE TO STOP" or "LOADING VIDEO", video.title)
+        local ok, message, stopped = runPlayback(video.url, true, loopVideo)
+        status = not ok and ("Playback failed: " .. tostring(message)) or (stopped and "Stopped." or "Finished.")
+        if not remembered then status = status .. " Could not remember last video." end
+        statusColor = (not ok or not remembered) and colors.orange or colors.lightGray
+        if startupNotice then status, statusColor = status .. " " .. startupNotice, colors.orange; startupNotice = nil end
+        scheduleRefresh()
+    end
+    selectOutputs() -- Surface a disconnected saved speaker before starting playback.
     refresh()
+    if startupNotice then status, statusColor = startupNotice, colors.orange; startupNotice = nil end
+    if config.startup == "loop" then
+        local last = settings.get("video.last_url")
+        local found
+        for index, video in ipairs(videos) do if video.url == last then found = index; break end end
+        if found then playChosen(found, true)
+        else status, statusColor = "Last video unavailable; showing library.", colors.orange end
+    end
     while true do
         setDisplayScale(menuScale)
         local width, height = term.getSize()
@@ -628,6 +978,7 @@ local function menu()
         local contentY, contentEnd = roomy and 5 or 4, height - 6
         local gap, availableWidth = 2, width - 4
         local columns = math.max(1, math.min(4, math.floor((availableWidth + gap) / 20)))
+        if config.columns > 0 then columns = math.min(config.columns, columns) end
         local cardWidth = math.floor((availableWidth - gap * (columns - 1)) / columns)
         local availableHeight = contentEnd - contentY + 1
         local rows = math.max(1, math.floor((availableHeight + 1) / (roomy and 7 or 5)))
@@ -686,21 +1037,23 @@ local function menu()
             {text = "PREV", action = "prev", enabled = page > 1},
             {text = "NEXT", action = "next", enabled = page < pages},
             {text = "REFRESH", action = "refresh", enabled = true, color = colors.cyan},
+            {text = "SETTINGS", action = "settings", enabled = true, color = colors.green},
             {text = "QUIT", action = "quit", enabled = true, color = colors.red},
         }
         local buttonGap = width >= 60 and 2 or 1
-        local buttonWidth = math.min(11, math.floor((width - 4 - buttonGap * 3) / 4))
-        local x = math.floor((width - (buttonWidth * 4 + buttonGap * 3)) / 2) + 1
+        local buttonWidth = math.min(11, math.floor((width - 4 - buttonGap * 4) / 5))
+        local x = math.floor((width - (buttonWidth * 5 + buttonGap * 4)) / 2) + 1
         for _, button in ipairs(buttons) do
             local w = buttonWidth
             local background = button.enabled and (button.color or colors.blue) or colors.gray
             fill(x, buttonY, w, buttonHeight, background)
-            center(x, buttonY + math.floor((buttonHeight - 1) / 2), w, button.text,
+            local label = w < 8 and button.action == "settings" and "SET" or w < 7 and button.action == "refresh" and "SYNC" or button.text
+            center(x, buttonY + math.floor((buttonHeight - 1) / 2), w, label,
                 button.color and colors.black or (button.enabled and colors.white or colors.lightGray), background)
             if button.enabled then target(x, buttonY, w, buttonHeight, button.action) end
             x = x + w + buttonGap
         end
-        local shortcuts = width >= 60 and " | Enter play, L loop | R refresh, Q quit" or " | Enter/L play/loop | R/Q"
+        local shortcuts = width >= 60 and " | Enter play, L loop | S settings | R/Q" or " | Enter/L | S settings | R/Q"
         center(1, height, width, "Page " .. page .. "/" .. pages .. shortcuts, colors.lightGray)
 
         local event, a, b, c = inputEvent()
@@ -716,6 +1069,7 @@ local function menu()
         elseif event == "char" then
             if a:lower() == "l" then action, chosen = "loop", selected
             elseif a:lower() == "r" then action = "refresh"
+            elseif a:lower() == "s" then action = "settings"
             elseif a:lower() == "q" then action = "quit" end
         elseif event == "mouse_scroll" then
             action = a > 0 and "next" or "prev"
@@ -729,19 +1083,16 @@ local function menu()
         elseif (event == "monitor_resize" and a == activeMonitor) or event == "term_resize" then
             local newWidth, newHeight = term.getSize()
             if newWidth ~= width or newHeight ~= height then chooseMenuScale() end
+        elseif event == "timer" and a == refreshTimer then
+            action = "refresh"
         end
         if action == "quit" then return
         elseif action == "refresh" then refresh()
+        elseif action == "settings" then settingsScreen()
         elseif action == "prev" then page = math.max(1, page - 1); selected = (page - 1) * capacity + 1
         elseif action == "next" then page = math.min(pages, page + 1); selected = (page - 1) * capacity + 1 end
         if chosen and videos[chosen] then
-            selected = chosen
-            local loopVideo = action == "loop"
-            busy(loopVideo and "LOADING LOOP - TOUCH / BACKSPACE TO STOP" or "LOADING VIDEO", videos[chosen].title)
-            local ok, message, stopped = runPlayback(videos[chosen].url, true, loopVideo)
-            status = not ok and ("Playback failed: " .. tostring(message))
-                or (stopped and "Stopped." or "Finished.")
-            statusColor = not ok and colors.orange or colors.lightGray
+            playChosen(chosen, action == "loop")
         end
     end
 end
@@ -760,6 +1111,6 @@ closeInput()
 pcall(restoreScreen)
 term.redirect(originalTerminal)
 if not ok then
-    if speaker then pcall(speaker.stop) end
+    stopOutputs()
     error(message, 0)
 end
