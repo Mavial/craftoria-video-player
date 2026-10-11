@@ -1,0 +1,196 @@
+{
+  "model": "CC:Tweaked single pending speaker buffer, 50ms server ticks, 0.5s client refill threshold; pinned CPU/render delays. Simulated, not an in-world measurement.",
+  "baseline_commit": "81494df",
+  "before": [
+    {
+      "seconds": 2,
+      "stall_ms": 180,
+      "render_ms_per_row": 0.25,
+      "fps": 30,
+      "gaps_ms": [
+        100.0,
+        100.0
+      ],
+      "max_gap_ms": 100.0,
+      "audio_samples": 96000,
+      "chunks": [
+        24000,
+        24000,
+        24000,
+        24000
+      ],
+      "rendered_frames": 60
+    },
+    {
+      "seconds": 6,
+      "stall_ms": 180,
+      "render_ms_per_row": 0.25,
+      "fps": 30,
+      "gaps_ms": [
+        100.0,
+        100.0
+      ],
+      "max_gap_ms": 100.0,
+      "audio_samples": 288000,
+      "chunks": [
+        24000,
+        24000,
+        24000,
+        24000,
+        24000,
+        24000,
+        24000,
+        24000,
+        24000,
+        24000,
+        24000,
+        24000
+      ],
+      "rendered_frames": 180
+    }
+  ],
+  "after": [
+    {
+      "recording": "wii-shop-bling",
+      "seconds": 2,
+      "stall_ms": 180,
+      "render_ms_per_row": 0.25,
+      "fps": 30,
+      "gaps_ms": [],
+      "max_gap_ms": 0,
+      "audio_samples": 96000,
+      "chunks": [
+        96000
+      ],
+      "rendered_frames": 45,
+      "audio_end_ms": 2050.0,
+      "menu_return_ms": 2550.0,
+      "audio_sha256": "427f10af7f98626bb2b737bc03dab1767ccd63c0345c5209afec1160d835d249"
+    },
+    {
+      "recording": "wii-shop-bling",
+      "seconds": 6,
+      "stall_ms": 180,
+      "render_ms_per_row": 0.25,
+      "fps": 30,
+      "gaps_ms": [],
+      "max_gap_ms": 0,
+      "audio_samples": 288000,
+      "chunks": [
+        131072,
+        131072,
+        25856
+      ],
+      "rendered_frames": 137,
+      "audio_end_ms": 6050.0,
+      "menu_return_ms": 6100.0,
+      "audio_sha256": "ccd38eb74d504275aba341778a2d7336eb6b5c9f5c4697c9bfadfe3458909f20"
+    },
+    {
+      "recording": "wii-shop-bling",
+      "seconds": 6,
+      "stall_ms": 180,
+      "render_ms_per_row": 0.5,
+      "fps": 30,
+      "gaps_ms": [],
+      "max_gap_ms": 0,
+      "audio_samples": 288000,
+      "chunks": [
+        131072,
+        131072,
+        25856
+      ],
+      "rendered_frames": 105,
+      "audio_end_ms": 6050.0,
+      "menu_return_ms": 6100.0,
+      "audio_sha256": "ccd38eb74d504275aba341778a2d7336eb6b5c9f5c4697c9bfadfe3458909f20"
+    },
+    {
+      "recording": "wii-shop-bling",
+      "seconds": 6,
+      "stall_ms": 0,
+      "render_ms_per_row": 0,
+      "fps": 30,
+      "gaps_ms": [],
+      "max_gap_ms": 0,
+      "audio_samples": 288000,
+      "chunks": [
+        131072,
+        131072,
+        25856
+      ],
+      "rendered_frames": 180,
+      "audio_end_ms": 6050.0,
+      "menu_return_ms": 6100,
+      "audio_sha256": "ccd38eb74d504275aba341778a2d7336eb6b5c9f5c4697c9bfadfe3458909f20"
+    },
+    {
+      "recording": "skaven-techno-lasers",
+      "seconds": 6,
+      "stall_ms": 180,
+      "render_ms_per_row": 0.25,
+      "fps": 24,
+      "gaps_ms": [],
+      "max_gap_ms": 0,
+      "audio_samples": 288000,
+      "chunks": [
+        131072,
+        131072,
+        25856
+      ],
+      "rendered_frames": 131,
+      "audio_end_ms": 6050.0,
+      "menu_return_ms": 6150.0,
+      "audio_sha256": "c83e8e4d837fa94087c4354862ef3af757c2974e9951281f320673a1534b8752"
+    },
+    {
+      "recording": "crazy-frog",
+      "seconds": 6,
+      "stall_ms": 180,
+      "render_ms_per_row": 0.25,
+      "fps": 25,
+      "gaps_ms": [],
+      "max_gap_ms": 0,
+      "audio_samples": 288000,
+      "chunks": [
+        131072,
+        131072,
+        25856
+      ],
+      "rendered_frames": 136,
+      "audio_end_ms": 6050.0,
+      "menu_return_ms": 6150.0,
+      "audio_sha256": "8ac4ddba59a85efbaea50931e102300e7905f35f93a96b747001dbec7cccc368"
+    }
+  ],
+  "full_decode_checks": [
+    {
+      "samples": 11712000,
+      "blits": 380640,
+      "retries": 90,
+      "accepted_chunks": 90,
+      "file_closed": true,
+      "file": "wii-shop-bling.32vid",
+      "mode": "file fixture"
+    },
+    {
+      "samples": 10032000,
+      "blits": 260832,
+      "retries": 77,
+      "accepted_chunks": 77,
+      "file_closed": true,
+      "file": "skaven-techno-lasers.32vid",
+      "mode": "file fixture"
+    },
+    {
+      "samples": 8256000,
+      "blits": 223600,
+      "retries": 63,
+      "accepted_chunks": 63,
+      "file_closed": true,
+      "file": "crazy-frog-axel-f-official-video-k85mrpqvmbe.32vid",
+      "mode": "file fixture"
+    }
+  ],
+  "speaker_documentation": "https://tweaked.cc/peripheral/speaker.html#v:playAudio"
+}

@@ -22,6 +22,9 @@
     "Loop download/format errors exit to the menu and close all handles without retrying forever",
     "Loop termination/disconnection closes playback, stops audio and restores the computer terminal",
     "Monitor resizing reflows cards and falls back to a readable fitting menu scale",
+    "DFPWM and raw PCM tracks use bounded speaker buffers and preserve every sample",
+    "Audio worker ignores buffer events from other speakers",
+    "No-speaker video playback works and truncated preload returns safely to the menu",
     "R2 catalogue pagination, duplicate filtering, monitor playback and removal refresh",
     "R2 malformed catalogue validation and input cleanup"
   ]

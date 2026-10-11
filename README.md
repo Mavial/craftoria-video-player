@@ -7,21 +7,21 @@ A CC:Tweaked video player for a **7-wide x 4-high Advanced Monitor wall**, with 
 Stop the existing player with Ctrl+T. Download the updated script to a fresh filename and launch it directly:
 
 ```text
-wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-loop.lua
-video-loop.lua
+wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-audio.lua
+video-audio.lua
 ```
 
-Choose an unused filename if `video-loop.lua` already exists. The player discovers directly attached and wired-network Advanced Monitors and chooses the largest wall that fits the current 143x52-character recordings. It uses text scale **1.0 for the menu** when the display has enough room, and switches to **0.5 for playback** to preserve the recording's full resolution. Smaller screens use a compact menu at 0.5, with a clear size error if a recording does not fit. With no Advanced Monitor connected, the menu stays on the computer for keyboard use. The R2 catalogue URL is already configured.
+Choose an unused filename if `video-audio.lua` already exists. The player discovers directly attached and wired-network Advanced Monitors and chooses the largest wall that fits the current 143x52-character recordings. It uses text scale **1.0 for the menu** when the display has enough room, and switches to **0.5 for playback** to preserve the recording's full resolution. Smaller screens use a compact menu at 0.5, with a clear size error if a recording does not fit. With no Advanced Monitor connected, the menu stays on the computer for keyboard use. The R2 catalogue URL is already configured.
 
-If several displays are connected and you want a particular wall, run `set video.monitor monitor_5` with its peripheral name, then launch the player. Use `set video.monitor nil` to return to automatic selection. The old `monitor MONITOR_NAME video-loop.lua` command still works, keeps its explicitly chosen monitor, and configures its scale automatically. Quit, errors and Ctrl+T restore the previous terminal. Touches on other monitors and mouse clicks in the computer GUI do not control an automatically selected wall.
+If several displays are connected and you want a particular wall, run `set video.monitor monitor_5` with its peripheral name, then launch the player. Use `set video.monitor nil` to return to automatic selection. The old `monitor MONITOR_NAME video-audio.lua` command still works, keeps its explicitly chosen monitor, and configures its scale automatically. Quit, errors and Ctrl+T restore the previous terminal. Touches on other monitors and mouse clicks in the computer GUI do not control an automatically selected wall.
 
 To run at computer boot, copy the player to an unused startup filename:
 
 ```text
-copy video-loop.lua startup.lua
+copy video-audio.lua startup.lua
 ```
 
-If this computer already has a startup script, use `shell.run("video-loop.lua")` in that script instead. If you previously copied the whole old player into `startup.lua`, replace that player copy with the updated version.
+If this computer already has a startup script, use `shell.run("video-audio.lua")` in that script instead. If you previously copied the whole old player into `startup.lua`, replace that player copy with the updated version.
 
 Tap **PLAY** or a card's header/title to play once. Tap its green **LOOP** button to repeat that recording until stopped. The header shows the file size, and the cyan accent marks the selected card. The SCADA-inspired menu uses dark panels, with **six cards per page in a 3x2 grid on the 7x4 wall**. Wider displays fit four columns (eight cards at the same height), and a standard computer uses two columns. Long titles wrap within each card. Previous, Next, Refresh and Quit are compact buttons, two character rows tall and at most eleven columns wide. Page buttons are disabled when there is no previous/next page; spaces between cards and empty cells do not start playback. The layout adapts to smaller screens and monitor resizing.
 
@@ -37,12 +37,14 @@ The menu lists the `.32vid` objects under `videos/` in the dedicated `craftoria-
 
 HTTP access must allow `craftoria-video-player.raftoria.workers.dev`. The list loads on launch and on explicit refresh; playback uses the current session's list. A failed refresh keeps the previous list and displays the error. Video files are downloaded over HTTP and are not saved to the computer disk. The player retains its GitHub source adapter for migration and continues to accept direct file/URL arguments.
 
+The player prepares the compressed recording in RAM before starting playback and separates the audio track from screen rendering. It feeds up to 131,072 samples (about 2.73 seconds) per speaker call, with one continuous DFPWM decoder per pass. This gives refills more headroom than the recording's original half-second packets. It checks the speaker name on buffer events and waits for the final audio to drain before finishing or restarting a loop. Under load, overdue video frames are skipped so the picture can catch up with uninterrupted audio. The recording's resolution and upload frame rate stay the same. These buffering choices follow [CC:Tweaked's speaker guidance](https://tweaked.cc/peripheral/speaker.html#v:playAudio).
+
 ## Play Wii Shop Bling
 
-Use the updated `video-loop.lua`; monitor discovery and scale setup are automatic:
+Use the updated `video-audio.lua`; monitor discovery and scale setup are automatic:
 
 ```text
-video-loop.lua https://craftoria-video-player.raftoria.workers.dev/videos/wii-shop-bling.32vid
+video-audio.lua https://craftoria-video-player.raftoria.workers.dev/videos/wii-shop-bling.32vid
 ```
 
 Hold Ctrl+T in the computer GUI to stop the previous recording before entering the new command. The new recording starts at the beginning; the YouTube radio playlist is not included.
@@ -50,7 +52,7 @@ Hold Ctrl+T in the computer GUI to stop the previous recording before entering t
 For a new computer, download the player first:
 
 ```text
-wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-loop.lua
+wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-audio.lua
 ```
 
 The ten-second test clip has been removed from R2 and GitHub; click Refresh in the menu to update the list.
@@ -73,14 +75,14 @@ Each recording starts at the beginning and includes complete audio. The linked r
 
 Source: [Wii Shop Bling, uploaded by eck](https://www.youtube.com/watch?v=gYOEyzBFYa4).
 
-The current R2 recordings use **24-30 FPS**, 286x156 subpixels (143 columns x 52 rows at text scale 0.5), ANS video compression and mono 48 kHz DFPWM audio. Wii Shop Bling covers the complete video, with final-frame and silent padding to 244 seconds. The encoded picture is letterboxed rather than stretched. The dedicated server's HTTP download limit is now **64 MiB**, as reported by the user. The uploader defaults to 67,108,863 bytes, one byte below `max_download = 67108864`, and tries up to 30 FPS, rounded to the source's whole-number frame rate if lower. It falls back to lower rates when a recording is too large. The player and Worker need no code changes for this increase. The higher frame rate improves motion; the resolution remains matched to the wall.
+The current R2 recordings use **24-30 FPS**, 286x156 subpixels (143 columns x 52 rows at text scale 0.5), ANS video compression and mono 48 kHz DFPWM audio. Wii Shop Bling covers the complete video, with final-frame and silent padding to 244 seconds. The encoded picture is letterboxed rather than stretched. The dedicated server's HTTP download limit is now **64 MiB**, as reported by the user. The uploader defaults to 67,108,863 bytes, one byte below `max_download = 67108864`, and tries up to 30 FPS, rounded to the source's whole-number frame rate if lower. It falls back to lower rates when a recording is too large. The Worker accepts the larger recordings; the player buffers audio ahead to tolerate the increased rendering load. The higher frame rate improves motion; the resolution remains matched to the wall.
 
 Use 28 joined Advanced Monitors, one dedicated Advanced Computer and one connected Speaker. The computer may touch the wall directly or connect over wired modems and Networking Cable. HTTP playback avoids writing the full recording to the computer disk. The server must permit the configured R2 Worker hostname.
 
-The current higher frame rate recordings are hosted on R2. The GitHub v1.1.0 release retains the original 7 FPS Wii recording; its root `manifest.json` and `verification.json` describe that historical version. Test clips were removed from hosting. Current R2 conversion, checksum and simulated playback results are under `recordings/`. `menu-verification.json` records checks using the installed CC:Tweaked scheduler and monitor program with simulated peripherals and catalogues: loop button targeting, two complete repeat passes, decoder resets, stopping during audio drain/reload, loop errors and termination, six/eight-card grids, sparse final pages, spatial keyboard navigation, full card/button touch targets, automatic monitor selection, menu/playback scale switching, responsive layout bounds, resize handling, touch isolation, terminal restoration, pinned displays, legacy launches, disconnection/termination cleanup, keyboard selection, pagination, refresh, errors, stopping, replay and audio state. The Worker checks cover catalogue pagination, exact download bytes, metadata, and route restrictions. The R2 menu, playback and automatic monitor startup were confirmed working in-world by the user; the compact grid layout was checked with simulated peripherals and rendered for visual review.
+The current higher frame rate recordings are hosted on R2. The GitHub v1.1.0 release retains the original 7 FPS Wii recording; its root `manifest.json` and `verification.json` describe that historical version. Test clips were removed from hosting. Current R2 conversion, checksum and simulated playback results are under `recordings/`. `menu-verification.json` records checks using the installed CC:Tweaked scheduler and monitor program with simulated peripherals and catalogues: loop button targeting, two complete repeat passes, decoder resets, stopping during audio drain/reload, loop errors and termination, six/eight-card grids, sparse final pages, spatial keyboard navigation, full card/button touch targets, automatic monitor selection, menu/playback scale switching, responsive layout bounds, resize handling, touch isolation, terminal restoration, pinned displays, legacy launches, disconnection/termination cleanup, keyboard selection, pagination, refresh, errors, stopping, replay and audio state. The Worker checks cover catalogue pagination, exact download bytes, metadata, and route restrictions. The R2 menu, playback and automatic monitor startup were confirmed working in-world by the user; the user also confirmed the compact grid layout working. The audio buffering fix has been checked in simulation. `audio-verification.json` records a reproducible 100 ms under-run before the fix, zero under-runs after it across six 24/25/30 FPS timing cases, waveform equality, final audio drain, and complete decoding of the three full recordings. These timing results inject render delays into a speaker model; they are not measurements from the Minecraft server.
 
 ## Upstream and licensing
 
-The player derives from [Sanjuuni 0.5's `32vid-player-mini.lua`](https://github.com/MCJack123/sanjuuni/blob/0.5/32vid-player-mini.lua). Changes retain DFPWM decoder state, retry rejected speaker buffers, yield while waiting for frames, and close the input handle after successful playback. The source is distributed with the upstream project's GNU GPL version 2 license in `LICENSE`.
+The player derives from [Sanjuuni 0.5's `32vid-player-mini.lua`](https://github.com/MCJack123/sanjuuni/blob/0.5/32vid-player-mini.lua). Changes retain DFPWM decoder state, buffer audio independently of video, retry rejected speaker buffers, yield while waiting for frames, skip overdue pictures to keep up with audio, and close input handles. The source is distributed with the upstream project's GNU GPL version 2 license in `LICENSE`.
 
 The GPL applies to the software. The source video's audio and images retain their original rights and attribution.

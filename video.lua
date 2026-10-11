@@ -212,8 +212,35 @@ local function play(path)
     --print(width, height, fps, nstreams, flags)
     if nstreams ~= 1 then closeInput() error("Separate stream files not supported by this tool") end
     if bit32_band(flags, 1) == 0 then closeInput() error("DEFLATE or no compression not supported by this tool") end
-    local _, nframes, ctype = ("<IIB"):unpack(file.read(9))
+    local streamSize, nframes, ctype = ("<IIB"):unpack(file.read(9))
     if ctype ~= 0x0C then closeInput() error("Stream type not supported by this tool") end
+
+    -- Demultiplex compressed audio before starting the playback clock. Keeping
+    -- the compressed recording in RAM avoids refills waiting on video decoding.
+    local data = file.readAll()
+    closeInput()
+    if #data ~= streamSize then error("Truncated 32Vid stream", 0) end
+    local audioPackets, position = {}, 1
+    for _ = 1, nframes do
+        if position + 4 > #data then error("Truncated 32Vid packet header", 0) end
+        local size, kind = ("<IB"):unpack(data, position)
+        local nextPosition = position + 5 + size
+        if nextPosition - 1 > #data then error("Truncated 32Vid packet", 0) end
+        if kind == 1 then audioPackets[#audioPackets + 1] = data:sub(position + 5, nextPosition - 1) end
+        position = nextPosition
+    end
+    if position ~= #data + 1 then error("Invalid 32Vid stream length", 0) end
+    local audioData = table.concat(audioPackets)
+    audioPackets, position = nil, 1
+    file = {
+        read = function(count)
+            if not count then local value = data:byte(position); position = position + 1; return value end
+            local value = data:sub(position, position + count - 1)
+            position = position + count
+            return value
+        end,
+        close = function() data = nil end,
+    }
     setDisplayScale(0.5)
     local outputWidth, outputHeight = term.getSize()
     if not bit32.btest(flags, 0x20) and (width > outputWidth or height > outputHeight) then
@@ -333,137 +360,160 @@ local function play(path)
     end
 
     local blitColors = {[0] = "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"}
-    local start = os.epoch "utc"
-    local lastyield = start
+    local start, lastyield
     local vframe = 0
     local subs = {}
     term.clear()
-    for _ = 1, nframes do
-        local size, ftype = ("<IB"):unpack(file.read(5))
-        --print(size, ftype, file.seek())
-        if ftype == 0 then
-            if os.epoch "utc" - lastyield > 3000 then sleep(0) lastyield = os.epoch "utc" end
-            local dcstart = os.epoch "utc"
-            --print("init screen", vframe, file.seek())
-            init(false)
-            --print("read screen", vframe, file.seek())
-            local screen = read(width * height)
-            --print("init colors", vframe, file.seek())
-            init(true)
-            --print("read bg colors", vframe)
-            local bg = read(width * height)
-            --print("read fg colors", vframe)
-            local fg = read(width * height)
-            local dctime = os.epoch "utc" - dcstart
-            local wait = start + vframe * 1000 / fps - os.epoch "utc"
-            if wait > 0 then sleep(wait / 1000) end
-            local texta, fga, bga = {}, {}, {}
-            for y = 0, height - 1 do
-                local text, fgs, bgs = "", "", ""
-                for x = 1, width do
-                    text = text .. string.char(128 + screen[y*width+x])
-                    fgs = fgs .. blitColors[fg[y*width+x]]
-                    bgs = bgs .. blitColors[bg[y*width+x]]
+    local function renderVideo()
+        start = start or os.epoch "utc"
+        lastyield = start
+        for _ = 1, nframes do
+            local size, ftype = ("<IB"):unpack(file.read(5))
+            --print(size, ftype, file.seek())
+            if ftype == 0 and speaker and #audioData > 0 and os.epoch "utc" > start + (vframe + 3) * 1000 / fps then
+                -- Frames are independently compressed. Catch up with audio instead
+                -- of spending monitor/decoder time displaying obsolete pictures.
+                file.read(size)
+                vframe = vframe + 1
+            elseif ftype == 0 then
+                if os.epoch "utc" - lastyield > 100 then sleep(0) lastyield = os.epoch "utc" end
+                local dcstart = os.epoch "utc"
+                --print("init screen", vframe, file.seek())
+                init(false)
+                --print("read screen", vframe, file.seek())
+                local screen = read(width * height)
+                --print("init colors", vframe, file.seek())
+                init(true)
+                --print("read bg colors", vframe)
+                local bg = read(width * height)
+                --print("read fg colors", vframe)
+                local fg = read(width * height)
+                local dctime = os.epoch "utc" - dcstart
+                local wait = start + vframe * 1000 / fps - os.epoch "utc"
+                if wait > 0 then sleep(wait / 1000) end
+                local texta, fga, bga = {}, {}, {}
+                for y = 0, height - 1 do
+                    local text, fgs, bgs = "", "", ""
+                    for x = 1, width do
+                        text = text .. string.char(128 + screen[y*width+x])
+                        fgs = fgs .. blitColors[fg[y*width+x]]
+                        bgs = bgs .. blitColors[bg[y*width+x]]
+                    end
+                    texta[y+1], fga[y+1], bga[y+1] = text, fgs, bgs
                 end
-                texta[y+1], fga[y+1], bga[y+1] = text, fgs, bgs
-            end
-            for i = 0, 15 do term.setPaletteColor(2^i, file.read() / 255, file.read() / 255, file.read() / 255) end
-            for y = 1, height do
-                term.setCursorPos(1, y)
-                term.blit(texta[y], fga[y], bga[y])
-            end
-            local delete = {}
-            for i, v in ipairs(subs) do
-                if vframe <= v.frame + v.length then
-                    term.setCursorPos(v.x, v.y)
-                    term.setBackgroundColor(v.bgColor)
-                    term.setTextColor(v.fgColor)
-                    term.write(v.text)
-                else delete[#delete+1] = i end
-            end
-            for i, v in ipairs(delete) do table.remove(subs, v - i + 1) end
-            --term.setCursorPos(1, height + 1)
-            --term.clearLine()
-            --print("Frame decode time:", dctime, "ms")
-            vframe = vframe + 1
-        elseif ftype == 1 then
-            local audio = file.read(size)
-            if speaker then
-                if bit32_band(flags, 12) == 0 then
-                    local chunk = {audio:byte(1, -1)}
-                    for i = 1, #chunk do chunk[i] = chunk[i] - 128 end
-                    while not speaker.playAudio(chunk) do os.pullEvent("speaker_audio_empty") end
-                else
-                    local chunk = decodeAudio(audio)
-                    while not speaker.playAudio(chunk) do os.pullEvent("speaker_audio_empty") end
+                for i = 0, 15 do term.setPaletteColor(2^i, file.read() / 255, file.read() / 255, file.read() / 255) end
+                for y = 1, height do
+                    term.setCursorPos(1, y)
+                    term.blit(texta[y], fga[y], bga[y])
                 end
-            end
-        elseif ftype == 8 then
-            local data = file.read(size)
-            local sub = {}
-            sub.frame, sub.length, sub.x, sub.y, sub.color, sub.flags, sub.text = ("<IIHHBBs2"):unpack(data)
-            sub.bgColor, sub.fgColor = 2^bit32_rshift(sub.color, 4), 2^bit32_band(sub.color, 15)
-            subs[#subs+1] = sub
-        elseif ftype >= 0x40 and ftype < 0x80 then
-            if ftype == 64 then vframe = vframe + 1 end
-            local mx, my = bit32_band(bit32_rshift(ftype, 3), 7) + 1, bit32_band(ftype, 7) + 1
-            --print("(" .. mx .. ", " .. my .. ")")
-            local term = monitors[my][mx]
-            if os.epoch "utc" - lastyield > 3000 then sleep(0) lastyield = os.epoch "utc" end
-            local width, height = ("<HH"):unpack(file.read(4))
-            local dcstart = os.epoch "utc"
-            --print("init screen", vframe, file.seek())
-            init(false)
-            --print("read screen", vframe, file.seek())
-            local screen = read(width * height)
-            --print("init colors", vframe, file.seek())
-            init(true)
-            --print("read bg colors", vframe)
-            local bg = read(width * height)
-            --print("read fg colors", vframe)
-            local fg = read(width * height)
-            local dctime = os.epoch "utc" - dcstart
-            local wait = start + vframe * 1000 / fps - os.epoch "utc"
-            if wait > 0 then sleep(wait / 1000) end
-            local texta, fga, bga = {}, {}, {}
-            for y = 0, height - 1 do
-                local text, fgs, bgs = "", "", ""
-                for x = 1, width do
-                    text = text .. string.char(128 + screen[y*width+x])
-                    fgs = fgs .. blitColors[fg[y*width+x]]
-                    bgs = bgs .. blitColors[bg[y*width+x]]
+                local delete = {}
+                for i, v in ipairs(subs) do
+                    if vframe <= v.frame + v.length then
+                        term.setCursorPos(v.x, v.y)
+                        term.setBackgroundColor(v.bgColor)
+                        term.setTextColor(v.fgColor)
+                        term.write(v.text)
+                    else delete[#delete+1] = i end
                 end
-                texta[y+1], fga[y+1], bga[y+1] = text, fgs, bgs
+                for i, v in ipairs(delete) do table.remove(subs, v - i + 1) end
+                --term.setCursorPos(1, height + 1)
+                --term.clearLine()
+                --print("Frame decode time:", dctime, "ms")
+                vframe = vframe + 1
+            elseif ftype == 1 then
+                file.read(size) -- The independent audio worker consumes this track.
+            elseif ftype == 8 then
+                local data = file.read(size)
+                local sub = {}
+                sub.frame, sub.length, sub.x, sub.y, sub.color, sub.flags, sub.text = ("<IIHHBBs2"):unpack(data)
+                sub.bgColor, sub.fgColor = 2^bit32_rshift(sub.color, 4), 2^bit32_band(sub.color, 15)
+                subs[#subs+1] = sub
+            elseif ftype >= 0x40 and ftype < 0x80 then
+                if ftype == 64 then vframe = vframe + 1 end
+                local mx, my = bit32_band(bit32_rshift(ftype, 3), 7) + 1, bit32_band(ftype, 7) + 1
+                --print("(" .. mx .. ", " .. my .. ")")
+                local term = monitors[my][mx]
+                if os.epoch "utc" - lastyield > 100 then sleep(0) lastyield = os.epoch "utc" end
+                local width, height = ("<HH"):unpack(file.read(4))
+                local dcstart = os.epoch "utc"
+                --print("init screen", vframe, file.seek())
+                init(false)
+                --print("read screen", vframe, file.seek())
+                local screen = read(width * height)
+                --print("init colors", vframe, file.seek())
+                init(true)
+                --print("read bg colors", vframe)
+                local bg = read(width * height)
+                --print("read fg colors", vframe)
+                local fg = read(width * height)
+                local dctime = os.epoch "utc" - dcstart
+                local wait = start + vframe * 1000 / fps - os.epoch "utc"
+                if wait > 0 then sleep(wait / 1000) end
+                local texta, fga, bga = {}, {}, {}
+                for y = 0, height - 1 do
+                    local text, fgs, bgs = "", "", ""
+                    for x = 1, width do
+                        text = text .. string.char(128 + screen[y*width+x])
+                        fgs = fgs .. blitColors[fg[y*width+x]]
+                        bgs = bgs .. blitColors[bg[y*width+x]]
+                    end
+                    texta[y+1], fga[y+1], bga[y+1] = text, fgs, bgs
+                end
+                for i = 0, 15 do term.setPaletteColor(2^i, file.read() / 255, file.read() / 255, file.read() / 255) end
+                for y = 1, height do
+                    term.setCursorPos(1, y)
+                    term.blit(texta[y], fga[y], bga[y])
+                end
+                --[[local delete = {}
+                for i, v in ipairs(subs) do
+                    if vframe <= v.frame + v.length then
+                        term.setCursorPos(v.x, v.y)
+                        term.setBackgroundColor(v.bgColor)
+                        term.setTextColor(v.fgColor)
+                        term.write(v.text)
+                    else delete[#delete+1] = i end
+                end
+                for i, v in ipairs(delete) do table.remove(subs, v - i + 1) end]]
+                --term.setCursorPos(1, height + 1)
+                --term.clearLine()
+                --print("Frame decode time:", dctime, "ms")
+            else closeInput() error("Unknown frame type " .. ftype) end
+        end
+    end
+
+    local function playAudio()
+        local raw = bit32_band(flags, 12) == 0
+        local chunkSize = raw and 131072 or 16384
+        local speakerName = peripheral.getName(speaker)
+        for offset = 1, #audioData, chunkSize do
+            local encoded = audioData:sub(offset, offset + chunkSize - 1)
+            local chunk
+            if raw then
+                chunk = {}
+                for index = 1, #encoded do chunk[index] = encoded:byte(index) - 128 end
+            else
+                chunk = decodeAudio(encoded)
             end
-            for i = 0, 15 do term.setPaletteColor(2^i, file.read() / 255, file.read() / 255, file.read() / 255) end
-            for y = 1, height do
-                term.setCursorPos(1, y)
-                term.blit(texta[y], fga[y], bga[y])
+            while not speaker.playAudio(chunk) do
+                repeat local _, name = os.pullEvent("speaker_audio_empty") until name == speakerName
             end
-            --[[local delete = {}
-            for i, v in ipairs(subs) do
-                if vframe <= v.frame + v.length then
-                    term.setCursorPos(v.x, v.y)
-                    term.setBackgroundColor(v.bgColor)
-                    term.setTextColor(v.fgColor)
-                    term.write(v.text)
-                else delete[#delete+1] = i end
-            end
-            for i, v in ipairs(delete) do table.remove(subs, v - i + 1) end]]
-            --term.setCursorPos(1, height + 1)
-            --term.clearLine()
-            --print("Frame decode time:", dctime, "ms")
-        else closeInput() error("Unknown frame type " .. ftype) end
+            start = start or os.epoch "utc"
+        end
+        -- Buffer-empty means "room for another packet", not audible completion.
+        -- Wait for the final pending packet to be dispatched, then let it drain.
+        if #audioData > 0 then
+            repeat local _, name = os.pullEvent("speaker_audio_empty") until name == speakerName
+            local lastSize = (#audioData - 1) % chunkSize + 1
+            sleep(lastSize * (raw and 1 or 8) / 48000 + 0.5)
+        end
+    end
+    if speaker and #audioData > 0 then
+        parallel.waitForAll(playAudio, renderVideo)
+    else
+        renderVideo()
     end
 
     closeInput()
-    if speaker then
-        local deadline = os.startTimer(3)
-        while true do
-            local event, value = os.pullEvent()
-            if event == "speaker_audio_empty" or (event == "timer" and value == deadline) then break end
-        end
-    end
 end
 
 local function runPlayback(path, canStop, loopVideo)
