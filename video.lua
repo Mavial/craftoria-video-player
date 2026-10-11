@@ -466,14 +466,21 @@ local function play(path)
     end
 end
 
-local function runPlayback(path, canStop)
+local function runPlayback(path, canStop, loopVideo)
     local stopped = false
     local ok, message = pcall(function()
         if canStop then
-            parallel.waitForAny(function() play(path) end, function()
+            parallel.waitForAny(function()
+                repeat
+                    play(path)
+                    -- Yield between repeats even for an empty recording, and
+                    -- leave the stop listener active while reloading the URL.
+                    if loopVideo then sleep(0) end
+                until not loopVideo
+            end, function()
                 while true do
                     local event, value = inputEvent()
-                    if file and ((event == "key" and value == keys.backspace) or event == "mouse_click") then
+                    if (event == "key" and value == keys.backspace) or event == "mouse_click" then
                         stopped = true
                         return
                     end
@@ -586,7 +593,7 @@ local function menu()
         local count = #videos .. (#videos == 1 and " video" or " videos")
         writeAt(3, roomy and 3 or 2, source, colors.cyan, colors.blue)
         writeAt(width - #count - 2, roomy and 3 or 2, count, colors.lightGray, colors.blue)
-        if roomy then center(1, 2, width, "SELECT A VIDEO TO PLAY", colors.lightGray, colors.blue) end
+        if roomy then center(1, 2, width, "PLAY ONCE OR LOOP A VIDEO", colors.lightGray, colors.blue) end
 
         local targets = {}
         local function target(x, y, w, h, action, index)
@@ -602,17 +609,20 @@ local function menu()
             fill(x, y, cardWidth, cardHeight, colors.gray)
             fill(x, y, 1, cardHeight, accent)
             fill(x + 1, y, cardWidth - 1, 1, colors.blue)
-            writeAt(x + 2, y, bounded(string.format("%02d  %s", index, index == selected and "SELECTED" or "VIDEO"), cardWidth - 3),
+            writeAt(x + 2, y, bounded(string.format("%02d  %.1f MB", index, video.size / 1000000), cardWidth - 3),
                 index == selected and colors.cyan or colors.lightGray, colors.blue)
             for line, text in ipairs(titleLines(video.title, cardWidth - 4, math.max(1, cardHeight - 2))) do
                 writeAt(x + 2, y + line, text, colors.white, colors.gray)
             end
             local footerY = y + cardHeight - 1
             fill(x + 1, footerY, cardWidth - 1, 1, colors.blue)
-            writeAt(x + 2, footerY, bounded(string.format("%.1f MB", video.size / 1000000), cardWidth - 10), colors.lightGray, colors.blue)
+            fill(x + 1, footerY, 7, 1, colors.green)
+            center(x + 1, footerY, 7, "LOOP >", colors.black, colors.green)
             fill(x + cardWidth - 7, footerY, 7, 1, accent)
             center(x + cardWidth - 7, footerY, 7, "PLAY >",
                 index == selected and colors.black or colors.white, accent)
+            -- Register the more specific loop button before the whole card.
+            target(x + 1, footerY, 7, 1, "loop", index)
             target(x, y, cardWidth, cardHeight, "play", index)
         end
         if #videos == 0 then
@@ -640,7 +650,7 @@ local function menu()
             if button.enabled then target(x, buttonY, w, buttonHeight, button.action) end
             x = x + w + buttonGap
         end
-        local shortcuts = width >= 60 and "  |  Arrows + Enter  |  R refresh, Q quit" or " | Arrows/Enter | R/Q"
+        local shortcuts = width >= 60 and " | Enter play, L loop | R refresh, Q quit" or " | Enter/L play/loop | R/Q"
         center(1, height, width, "Page " .. page .. "/" .. pages .. shortcuts, colors.lightGray)
 
         local event, a, b, c = inputEvent()
@@ -654,7 +664,8 @@ local function menu()
             elseif a == keys.pageUp then action = "prev"
             elseif a == keys.pageDown then action = "next" end
         elseif event == "char" then
-            if a:lower() == "r" then action = "refresh"
+            if a:lower() == "l" then action, chosen = "loop", selected
+            elseif a:lower() == "r" then action = "refresh"
             elseif a:lower() == "q" then action = "quit" end
         elseif event == "mouse_scroll" then
             action = a > 0 and "next" or "prev"
@@ -675,8 +686,9 @@ local function menu()
         elseif action == "next" then page = math.min(pages, page + 1); selected = (page - 1) * capacity + 1 end
         if chosen and videos[chosen] then
             selected = chosen
-            busy("LOADING VIDEO", videos[chosen].title)
-            local ok, message, stopped = runPlayback(videos[chosen].url, true)
+            local loopVideo = action == "loop"
+            busy(loopVideo and "LOADING LOOP - TOUCH / BACKSPACE TO STOP" or "LOADING VIDEO", videos[chosen].title)
+            local ok, message, stopped = runPlayback(videos[chosen].url, true, loopVideo)
             status = not ok and ("Playback failed: " .. tostring(message))
                 or (stopped and "Stopped." or "Finished.")
             statusColor = not ok and colors.orange or colors.lightGray

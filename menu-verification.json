@@ -16,6 +16,11 @@
     "Responsive compact/monitor layouts remain in bounds and disabled page buttons ignore touches",
     "Six/eight-card grids map every tile to the correct video; empty final-page cells ignore touches",
     "Arrow keys move horizontally and vertically through the grid",
+    "Each six/eight-grid LOOP button selects its own recording and accepts both edges",
+    "Two complete video/audio loop passes restart decoder state; touch stops during audio drain and PLAY remains once-only",
+    "Keyboard L loops; Backspace stops between passes and during the next download",
+    "Loop download/format errors exit to the menu and close all handles without retrying forever",
+    "Loop termination/disconnection closes playback, stops audio and restores the computer terminal",
     "Monitor resizing reflows cards and falls back to a readable fitting menu scale",
     "R2 catalogue pagination, duplicate filtering, monitor playback and removal refresh",
     "R2 malformed catalogue validation and input cleanup"
