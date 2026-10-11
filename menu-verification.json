@@ -6,17 +6,12 @@
     "Refresh updates library; rate-limit recovery preserves selection",
     "Empty library and malformed GitHub responses",
     "Invalid recording recovery and Ctrl+T cleanup",
+    "Automatic wall selection, scale setup, colour/size filtering, isolated monitor touches and terminal restoration",
+    "Explicit monitor setting and invalid/disconnected setting recovery",
+    "Legacy ROM monitor launch keeps its display, configures scale, and converts each touch once",
+    "Automatic monitor termination/disconnection closes playback and restores the computer terminal",
+    "Small walls show the menu and report actual recording dimensions without cropping",
     "R2 catalogue pagination, duplicate filtering, monitor playback and removal refresh",
-    "R2 malformed catalogue validation and input cleanup",
-    "Live unauthenticated GitHub release and asset responses",
-    "Live public R2 Worker catalogue"
-  ],
-  "live_library": [
-    "Wii Shop Bling",
-    "Wii Shop Bling Test"
-  ],
-  "live_r2_library": [
-    "Wii Shop Bling",
-    "Wii Shop Bling Test"
+    "R2 malformed catalogue validation and input cleanup"
   ]
 }

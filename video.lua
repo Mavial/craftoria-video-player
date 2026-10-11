@@ -9,6 +9,83 @@ end
 -- Based on MCJack123/sanjuuni 0.5's 32vid-player-mini.lua.
 -- Keep audio decoder state, wait for speaker buffers, and yield between frames.
 local file, speaker
+local originalTerminal = term.current()
+local activeMonitor, ownsMonitor = nil, false
+
+local function setupMonitor()
+    -- An explicit ROM "monitor <name> ..." launch keeps its chosen display and
+    -- touch conversion. Direct launches select and redirect a display here.
+    local wrapped, currentName = pcall(peripheral.getName, originalTerminal)
+    if wrapped and peripheral.getType(currentName) == "monitor" then
+        if not originalTerminal.isColor() then error("Video playback needs an Advanced Monitor.", 0) end
+        originalTerminal.setTextScale(0.5)
+        originalTerminal.setCursorBlink(false)
+        activeMonitor = currentName
+        return
+    end
+
+    local selected, configured = nil, settings.get("video.monitor")
+    if configured ~= nil and configured ~= "" then
+        if type(configured) ~= "string" or peripheral.getType(configured) ~= "monitor" then
+            error("video.monitor is not connected. Use 'set video.monitor nil' to enable automatic selection.", 0)
+        end
+        selected = {name = configured, monitor = peripheral.wrap(configured)}
+        if not selected.monitor.isColor() then error("video.monitor must name an Advanced Monitor.", 0) end
+    else
+        local candidates = {}
+        for _, name in ipairs(peripheral.getNames()) do
+            if peripheral.getType(name) == "monitor" then
+                local ok, candidate = pcall(function()
+                    local monitor = peripheral.wrap(name)
+                    if not monitor.isColor() then return end
+                    local width, height = monitor.getSize()
+                    local scale = monitor.getTextScale()
+                    return {name = name, monitor = monitor, scale = scale,
+                        area = width * height * scale * scale}
+                end)
+                if ok and candidate then candidates[#candidates + 1] = candidate end
+            end
+        end
+        table.sort(candidates, function(a, b)
+            if a.area == b.area then return a.name < b.name end
+            return a.area > b.area
+        end)
+        -- Probe the largest walls first. Restore scales on displays we skip.
+        for _, candidate in ipairs(candidates) do
+            local ok, fits = pcall(function()
+                candidate.monitor.setTextScale(0.5)
+                local width, height = candidate.monitor.getSize()
+                return width >= 143 and height >= 52
+            end)
+            if ok and fits then selected = candidate; break end
+            pcall(candidate.monitor.setTextScale, candidate.scale)
+        end
+        -- A smaller Advanced Monitor can still show the menu. Playback reports
+        -- the actual required dimensions rather than silently cropping video.
+        selected = selected or candidates[1]
+    end
+    if selected then
+        selected.monitor.setTextScale(0.5)
+        activeMonitor, ownsMonitor = selected.name, true
+        term.redirect(selected.monitor)
+        term.setCursorBlink(false)
+    end
+end
+
+local function inputEvent()
+    while true do
+        local event = table.pack(os.pullEvent())
+        if ownsMonitor and event[1] == "monitor_touch" then
+            if event[2] == activeMonitor then return "mouse_click", 1, event[3], event[4] end
+        elseif ownsMonitor and event[1]:match("^mouse_") then
+            -- Computer-GUI coordinates do not refer to the selected monitor.
+        elseif event[1] == "peripheral_detach" and event[2] == activeMonitor then
+            error("Video monitor disconnected. Reconnect it and start the player again.", 0)
+        else
+            return table.unpack(event, 1, event.n)
+        end
+    end
+end
 
 local function closeInput()
     if file then
@@ -133,7 +210,8 @@ local function play(path)
     if ctype ~= 0x0C then closeInput() error("Stream type not supported by this tool") end
     local outputWidth, outputHeight = term.getSize()
     if not bit32.btest(flags, 0x20) and (width > outputWidth or height > outputHeight) then
-        error("Video does not fit this screen. Set monitor scale to 0.5 or use a larger wall.", 0)
+        error(string.format("Video needs %dx%d characters; this screen is %dx%d. Use a larger Advanced Monitor wall.",
+            width, height, outputWidth, outputHeight), 0)
     end
 
     local monitors, mawidth, maheight
@@ -387,7 +465,7 @@ local function runPlayback(path, canStop)
         if canStop then
             parallel.waitForAny(function() play(path) end, function()
                 while true do
-                    local event, value = os.pullEvent()
+                    local event, value = inputEvent()
                     if file and ((event == "key" and value == keys.backspace) or event == "mouse_click") then
                         stopped = true
                         return
@@ -400,8 +478,9 @@ local function runPlayback(path, canStop)
     end)
     closeInput()
     if speaker and (stopped or not ok) then pcall(speaker.stop) end
-    restoreScreen()
+    local restored, restoreError = pcall(restoreScreen)
     if not ok and tostring(message) == "Terminated" then error(message, 0) end
+    if not restored then error(not ok and message or restoreError, 0) end
     return ok, message, stopped
 end
 
@@ -422,7 +501,7 @@ local function menu()
     refresh()
     while true do
         local width, height = term.getSize()
-        if width < 36 or height < 12 then error("Menu needs at least 36 columns and 12 rows. Set monitor scale to 0.5.", 0) end
+        if width < 36 or height < 12 then error("Menu needs at least 36 columns and 12 rows. Use a larger Advanced Monitor.", 0) end
         local capacity = math.max(1, math.floor((height - 10) / 2))
         local pages = math.max(1, math.ceil(#videos / capacity))
         page = math.min(page, pages)
@@ -453,7 +532,7 @@ local function menu()
         for _, button in ipairs(buttons) do writeAt(button.x, height - 2, button.text, colors.cyan) end
         writeAt(2, height, "Page " .. page .. "/" .. pages .. "  |  R refresh, Q quit", colors.lightGray)
 
-        local event, a, b, c = os.pullEvent()
+        local event, a, b, c = inputEvent()
         local action, chosen
         if event == "key" then
             if a == keys.up then selected = math.max(1, selected - 1)
@@ -493,6 +572,7 @@ end
 
 local path = ...
 local ok, message = pcall(function()
+    setupMonitor()
     if path then
         local played, failure = runPlayback(path, false)
         if not played then error(failure, 0) end
@@ -501,7 +581,8 @@ local ok, message = pcall(function()
     end
 end)
 closeInput()
-restoreScreen()
+pcall(restoreScreen)
+term.redirect(originalTerminal)
 if not ok then
     if speaker then pcall(speaker.stop) end
     error(message, 0)

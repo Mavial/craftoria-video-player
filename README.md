@@ -4,15 +4,24 @@ A CC:Tweaked video player for a **7-wide x 4-high Advanced Monitor wall**, with 
 
 ## Open the video menu
 
-Stop the existing player with Ctrl+T. Update the script and launch it with the same monitor name as your working test:
+Stop the existing player with Ctrl+T. Download the updated script to a fresh filename and launch it directly:
 
 ```text
-wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-r2.lua
-monitor scale MONITOR_NAME 0.5
-monitor MONITOR_NAME video-r2.lua
+wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-auto.lua
+video-auto.lua
 ```
 
-Choose an unused filename if `video-r2.lua` already exists. The R2 catalogue URL is configured in the script, so no further source setting is needed.
+Choose an unused filename if `video-auto.lua` already exists. The player discovers directly attached and wired-network Advanced Monitors, chooses the largest wall that fits the current 143x52-character recordings, sets its text scale to 0.5, and displays the menu there. Smaller Advanced Monitors can show the menu, with a clear size error if a recording does not fit. With no Advanced Monitor connected, the menu stays on the computer for keyboard use. The R2 catalogue URL is already configured.
+
+If several displays are connected and you want a particular wall, run `set video.monitor monitor_5` with its peripheral name, then launch the player. Use `set video.monitor nil` to return to automatic selection. The old `monitor MONITOR_NAME video-auto.lua` command still works, keeps its explicitly chosen monitor, and configures its scale automatically. Quit, errors and Ctrl+T restore the previous terminal. Touches on other monitors and mouse clicks in the computer GUI do not control an automatically selected wall.
+
+To run at computer boot, copy the player to an unused startup filename:
+
+```text
+copy video-auto.lua startup.lua
+```
+
+If this computer already has a startup script, add `shell.run("video-auto.lua")` to that script instead.
 
 Click a video on the monitor, or use Up/Down and Enter from the computer. Click during playback or press Backspace to stop and return to the menu. Completed videos return automatically. The menu also has clickable Previous, Next, Refresh and Quit buttons; Left/Right changes pages, R refreshes, and Q quits.
 
@@ -22,11 +31,10 @@ HTTP access must allow `craftoria-video-player.raftoria.workers.dev`. The list l
 
 ## Play Wii Shop Bling
 
-Use the updated `video-r2.lua` and the same monitor name as your working test:
+Use the updated `video-auto.lua`; monitor discovery and scale setup are automatic:
 
 ```text
-monitor scale MONITOR_NAME 0.5
-monitor MONITOR_NAME video-r2.lua https://craftoria-video-player.raftoria.workers.dev/videos/wii-shop-bling.32vid
+video-auto.lua https://craftoria-video-player.raftoria.workers.dev/videos/wii-shop-bling.32vid
 ```
 
 Hold Ctrl+T in the computer GUI to stop the previous recording before entering the new command. The new recording starts at the beginning; the YouTube radio playlist is not included.
@@ -34,10 +42,10 @@ Hold Ctrl+T in the computer GUI to stop the previous recording before entering t
 For a new computer, download the player first:
 
 ```text
-wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-r2.lua
+wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-auto.lua
 ```
 
-Use `peripherals` to discover the monitor name. The ten-second test clip has been removed from R2 and GitHub; click Refresh in the menu to update the list.
+The ten-second test clip has been removed from R2 and GitHub; click Refresh in the menu to update the list.
 
 ## Available recordings
 
@@ -61,7 +69,7 @@ The current R2 recordings use **24-30 FPS**, 286x156 subpixels (143 columns x 52
 
 Use 28 joined Advanced Monitors, one dedicated Advanced Computer and one connected Speaker. The computer may touch the wall directly or connect over wired modems and Networking Cable. HTTP playback avoids writing the full recording to the computer disk. The server must permit the configured R2 Worker hostname.
 
-The current higher frame rate recordings are hosted on R2. The GitHub v1.1.0 release retains the original 7 FPS Wii recording; its root `manifest.json` and `verification.json` describe that historical version. Test clips were removed from hosting. Current R2 conversion, checksum and simulated playback results are under `recordings/`. `menu-verification.json` records earlier menu checks with the installed CC:Tweaked scheduler and monitor program, covering clicks, keyboard selection, pagination, refresh, errors, stopping, replay and audio state, plus the public GitHub and R2 libraries at that time. The Worker checks cover catalogue pagination, exact download bytes, metadata, and route restrictions. The R2 menu and player were confirmed working in-world by the user before the size increase; the upgraded replacements were checked with simulated peripherals.
+The current higher frame rate recordings are hosted on R2. The GitHub v1.1.0 release retains the original 7 FPS Wii recording; its root `manifest.json` and `verification.json` describe that historical version. Test clips were removed from hosting. Current R2 conversion, checksum and simulated playback results are under `recordings/`. `menu-verification.json` records checks using the installed CC:Tweaked scheduler and monitor program with simulated peripherals and catalogues: automatic monitor selection and scaling, touch isolation, terminal restoration, pinned displays, legacy launches, disconnection/termination cleanup, keyboard selection, pagination, refresh, errors, stopping, replay and audio state. The Worker checks cover catalogue pagination, exact download bytes, metadata, and route restrictions. The R2 menu and player were confirmed working in-world by the user before the size increase; the upgraded recordings and automatic monitor startup were checked with simulated peripherals.
 
 ## Upstream and licensing
 
