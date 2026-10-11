@@ -87,6 +87,12 @@ local function inputEvent()
     end
 end
 
+local function setDisplayScale(scale)
+    if activeMonitor and term.current().getTextScale() ~= scale then
+        term.current().setTextScale(scale)
+    end
+end
+
 local function closeInput()
     if file then
         pcall(file.close)
@@ -208,6 +214,7 @@ local function play(path)
     if bit32_band(flags, 1) == 0 then closeInput() error("DEFLATE or no compression not supported by this tool") end
     local _, nframes, ctype = ("<IIB"):unpack(file.read(9))
     if ctype ~= 0x0C then closeInput() error("Stream type not supported by this tool") end
+    setDisplayScale(0.5)
     local outputWidth, outputHeight = term.getSize()
     if not bit32.btest(flags, 0x20) and (width > outputWidth or height > outputHeight) then
         error(string.format("Video needs %dx%d characters; this screen is %dx%d. Use a larger Advanced Monitor wall.",
@@ -486,51 +493,150 @@ end
 
 local function menu()
     local videos, selected, page, status = {}, 1, 1, ""
-    local function refresh()
+    local statusColor, menuScale = colors.lightGray, 0.5
+    local palette = {
+        {colors.black, 0x14151D}, {colors.gray, 0x343642}, {colors.blue, 0x29364A},
+        {colors.lightGray, 0xABABBB}, {colors.white, 0xEEEEF3}, {colors.cyan, 0x5DD6DF},
+        {colors.green, 0x54B89B}, {colors.orange, 0xF1B562}, {colors.red, 0xD26A75},
+    }
+    local function chooseMenuScale()
+        if activeMonitor then
+            setDisplayScale(1)
+            local width, height = term.getSize()
+            menuScale = width >= 51 and height >= 19 and 1 or 0.5
+            setDisplayScale(menuScale)
+        end
+    end
+    local function theme()
         restoreScreen()
-        term.write("Loading videos from " .. (r2URL() ~= "" and "R2" or "GitHub") .. "...")
+        for _, entry in ipairs(palette) do term.setPaletteColor(entry[1], entry[2]) end
+    end
+    local function bounded(text, width)
+        return #text <= width and text or text:sub(1, math.max(0, width - 3)) .. "..."
+    end
+    local function writeAt(x, y, text, foreground, background)
+        local width, height = term.getSize()
+        if x > width or y > height then return end
+        term.setCursorPos(x, y)
+        term.setTextColor(foreground or colors.white)
+        term.setBackgroundColor(background or colors.black)
+        term.write(text:sub(1, width - x + 1))
+    end
+    local function fill(x, y, width, height, background)
+        for row = y, y + height - 1 do writeAt(x, row, string.rep(" ", width), colors.white, background) end
+    end
+    local function center(x, y, width, text, foreground, background)
+        text = bounded(text, width)
+        writeAt(x + math.floor((width - #text) / 2), y, text, foreground, background)
+    end
+    local function titleLines(text, width, count)
+        local lines = {}
+        text = text:gsub("%s+", " ")
+        for line = 1, count do
+            if #text <= width or line == count then lines[line] = bounded(text, width); break end
+            local split = text:sub(1, width):match("^.*()%s") or width + 1
+            lines[line], text = text:sub(1, split - 1), text:sub(split):gsub("^%s+", "")
+        end
+        return lines
+    end
+    local function busy(title, detail)
+        setDisplayScale(menuScale)
+        theme()
+        local width, height = term.getSize()
+        fill(1, 1, width, 2, colors.blue)
+        center(1, 1, width, "CRAFTORIA VIDEO LIBRARY", colors.white, colors.blue)
+        center(2, math.max(3, math.floor(height / 2)), width - 2, title, colors.cyan)
+        center(2, math.max(4, math.floor(height / 2) + 2), width - 2, detail, colors.lightGray)
+    end
+    chooseMenuScale()
+    local function refresh()
+        busy("SYNCING LIBRARY", "Checking for new recordings...")
         local ok, result = pcall(loadLibrary)
         if ok then
             videos, selected, page = result, 1, 1
-            status = #videos == 0 and "No published .32vid videos. Press R to refresh." or "Library updated."
+            status = #videos == 0 and "No published videos. Tap REFRESH after uploading." or "Library updated."
+            statusColor = colors.lightGray
         else
             if tostring(result) == "Terminated" then error(result, 0) end
             status = "Refresh failed: " .. tostring(result)
+            statusColor = colors.orange
         end
     end
     refresh()
     while true do
+        setDisplayScale(menuScale)
         local width, height = term.getSize()
         if width < 36 or height < 12 then error("Menu needs at least 36 columns and 12 rows. Use a larger Advanced Monitor.", 0) end
-        local capacity = math.max(1, math.floor((height - 10) / 2))
+        local roomy = height >= 24
+        local cardHeight = roomy and 4 or (height >= 16 and 3 or 2)
+        local contentY, contentEnd = roomy and 5 or 4, height - (roomy and 8 or 6)
+        local capacity = math.max(1, math.floor((contentEnd - contentY + 2) / (cardHeight + 1)))
         local pages = math.max(1, math.ceil(#videos / capacity))
-        page = math.min(page, pages)
-        restoreScreen()
-        local function writeAt(x, y, text, color)
-            term.setCursorPos(x, y)
-            term.setTextColor(color or colors.white)
-            term.write(text:sub(1, width - x + 1))
+        selected = math.max(1, math.min(selected, #videos))
+        page = math.min(pages, math.floor((selected - 1) / capacity) + 1)
+        theme()
+        fill(1, 1, width, roomy and 3 or 2, colors.blue)
+        center(1, 1, width, "CRAFTORIA VIDEO LIBRARY", colors.white, colors.blue)
+        local source = r2URL() ~= "" and "Cloudflare R2" or "GitHub"
+        local count = #videos .. (#videos == 1 and " video" or " videos")
+        writeAt(3, roomy and 3 or 2, source, colors.cyan, colors.blue)
+        writeAt(width - #count - 2, roomy and 3 or 2, count, colors.lightGray, colors.blue)
+        if roomy then center(1, 2, width, "SELECT A VIDEO TO PLAY", colors.lightGray, colors.blue) end
+
+        local targets = {}
+        local function target(x, y, w, h, action, index)
+            targets[#targets + 1] = {x = x, y = y, w = w, h = h, action = action, index = index}
         end
-        writeAt(2, 1, "CRAFTORIA VIDEO LIBRARY", colors.cyan)
-        writeAt(2, 2, (r2URL() ~= "" and "Cloudflare R2" or REPOSITORY) .. "  |  " .. #videos .. " videos", colors.lightGray)
-        writeAt(2, 3, "Click a video, or use arrows + Enter.")
-        writeAt(2, 4, "During playback: click / Backspace to return.", colors.lightGray)
         local first = (page - 1) * capacity + 1
         for index = first, math.min(#videos, first + capacity - 1) do
-            local video, y = videos[index], 6 + (index - first) * 2
-            writeAt(2, y, (index == selected and "> " or "  ") .. video.title,
-                index == selected and colors.yellow or colors.white)
-            writeAt(4, y + 1, video.release .. "  |  " .. string.format("%.2f MB", video.size / 1000000), colors.lightGray)
+            local video, y = videos[index], contentY + (index - first) * (cardHeight + 1)
+            local x, cardWidth = 3, width - 4
+            local accent = index == selected and colors.cyan or colors.blue
+            fill(x, y, cardWidth, cardHeight, colors.gray)
+            fill(x, y, 1, cardHeight, accent)
+            if cardHeight > 2 then
+                fill(x + 1, y, cardWidth - 1, 1, colors.blue)
+                writeAt(x + 2, y, string.format("%02d  %s", index, index == selected and "SELECTED" or "VIDEO"),
+                    index == selected and colors.cyan or colors.lightGray, colors.blue)
+            end
+            local playX, playY = x + cardWidth - 11, cardHeight > 2 and y + 1 or y
+            local playHeight = math.max(1, cardHeight - 2)
+            fill(playX, playY, 10, playHeight, accent)
+            center(playX, playY + math.floor((playHeight - 1) / 2), 10, "PLAY >",
+                index == selected and colors.black or colors.white, accent)
+            local titleY = cardHeight > 2 and y + 1 or y
+            for line, text in ipairs(titleLines(video.title, cardWidth - 16, math.max(1, cardHeight - 2))) do
+                writeAt(x + 3, titleY + line - 1, text, colors.white, colors.gray)
+            end
+            writeAt(x + 3, y + cardHeight - 1, string.format("%.1f MB", video.size / 1000000), colors.lightGray, colors.gray)
+            target(x, y, cardWidth, cardHeight, "play", index)
         end
-        writeAt(2, height - 4, status:gsub("[%c]", " "), colors.lightGray)
+        if #videos == 0 then
+            center(3, contentY, width - 4, statusColor == colors.orange and "LIBRARY UNAVAILABLE" or "YOUR LIBRARY IS EMPTY", colors.lightGray)
+        end
+
+        local statusY, buttonY, buttonHeight = height - (roomy and 6 or 4), height - (roomy and 4 or 2), roomy and 3 or 2
+        fill(3, statusY, width - 4, 1, colors.blue)
+        writeAt(4, statusY, bounded(status:gsub("[%c]", " "), width - 6), statusColor, colors.blue)
         local buttons = {
-            {x = 2, text = "[Prev]", action = "prev"},
-            {x = 10, text = "[Next]", action = "next"},
-            {x = 18, text = "[Refresh]", action = "refresh"},
-            {x = 29, text = "[Quit]", action = "quit"},
+            {text = "PREV", action = "prev", enabled = page > 1},
+            {text = "NEXT", action = "next", enabled = page < pages},
+            {text = "REFRESH", action = "refresh", enabled = true, color = colors.cyan},
+            {text = "QUIT", action = "quit", enabled = true, color = colors.red},
         }
-        for _, button in ipairs(buttons) do writeAt(button.x, height - 2, button.text, colors.cyan) end
-        writeAt(2, height, "Page " .. page .. "/" .. pages .. "  |  R refresh, Q quit", colors.lightGray)
+        local gap, x = width >= 60 and 2 or 1, 3
+        local buttonWidth = math.floor((width - 4 - gap * 3) / 4)
+        for index, button in ipairs(buttons) do
+            local w = index == #buttons and width - 1 - x or buttonWidth
+            local background = button.enabled and (button.color or colors.blue) or colors.gray
+            fill(x, buttonY, w, buttonHeight, background)
+            center(x, buttonY + math.floor((buttonHeight - 1) / 2), w, button.text,
+                button.color and colors.black or (button.enabled and colors.white or colors.lightGray), background)
+            if button.enabled then target(x, buttonY, w, buttonHeight, button.action) end
+            x = x + w + gap
+        end
+        local shortcuts = width >= 60 and "  |  Arrows + Enter  |  R refresh, Q quit" or " | Arrows/Enter | R/Q"
+        center(1, height, width, "Page " .. page .. "/" .. pages .. shortcuts, colors.lightGray)
 
         local event, a, b, c = inputEvent()
         local action, chosen
@@ -547,13 +653,15 @@ local function menu()
         elseif event == "mouse_scroll" then
             action = a > 0 and "next" or "prev"
         elseif event == "mouse_click" then
-            if c == height - 2 then
-                for _, button in ipairs(buttons) do
-                    if b >= button.x and b < button.x + #button.text then action = button.action end
+            for _, box in ipairs(targets) do
+                if b >= box.x and b < box.x + box.w and c >= box.y and c < box.y + box.h then
+                    action, chosen = box.action, box.index
+                    break
                 end
-            elseif c >= 6 and c < 6 + capacity * 2 then
-                chosen = first + math.floor((c - 6) / 2)
             end
+        elseif (event == "monitor_resize" and a == activeMonitor) or event == "term_resize" then
+            local newWidth, newHeight = term.getSize()
+            if newWidth ~= width or newHeight ~= height then chooseMenuScale() end
         end
         if action == "quit" then return
         elseif action == "refresh" then refresh()
@@ -561,11 +669,11 @@ local function menu()
         elseif action == "next" then page = math.min(pages, page + 1); selected = (page - 1) * capacity + 1 end
         if chosen and videos[chosen] then
             selected = chosen
-            restoreScreen()
-            term.write("Loading " .. videos[chosen].title .. "...")
+            busy("LOADING VIDEO", videos[chosen].title)
             local ok, message, stopped = runPlayback(videos[chosen].url, true)
             status = not ok and ("Playback failed: " .. tostring(message))
                 or (stopped and "Stopped." or "Finished.")
+            statusColor = not ok and colors.orange or colors.lightGray
         end
     end
 end
