@@ -1,0 +1,26 @@
+{
+  "full": {
+    "file": "pacer.32vid",
+    "bytes": 9290276,
+    "video_frames": 887,
+    "audio_seconds": 887.0,
+    "columns": 143,
+    "rows": 52,
+    "fps": 1
+  },
+  "test": {
+    "file": "pacer-test.32vid",
+    "bytes": 73546,
+    "video_frames": 10,
+    "audio_seconds": 10.0,
+    "columns": 143,
+    "rows": 52,
+    "fps": 1
+  },
+  "source_start_seconds": 14,
+  "source_id": "Y82jDHRrswc",
+  "assumed_wall_blocks": [
+    7,
+    4
+  ]
+}

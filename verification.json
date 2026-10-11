@@ -1,0 +1,29 @@
+[
+  {
+    "samples": 480000,
+    "blits": 520,
+    "retries": 13,
+    "accepted_chunks": 20,
+    "file_closed": true,
+    "file": "pacer-test.32vid",
+    "mode": "file fixture"
+  },
+  {
+    "samples": 480000,
+    "blits": 520,
+    "retries": 13,
+    "accepted_chunks": 20,
+    "file_closed": true,
+    "file": "pacer-test.32vid",
+    "mode": "HTTP fixture"
+  },
+  {
+    "samples": 42576000,
+    "blits": 46124,
+    "retries": 890,
+    "accepted_chunks": 1774,
+    "file_closed": true,
+    "file": "pacer.32vid",
+    "mode": "file fixture"
+  }
+]
