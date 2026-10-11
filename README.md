@@ -7,40 +7,40 @@ A CC:Tweaked video player for a **7-wide x 4-high Advanced Monitor wall**, with 
 Stop the existing player with Ctrl+T. Download the updated script to a fresh filename and launch it directly:
 
 ```text
-wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-touch.lua
-video-touch.lua
+wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-grid.lua
+video-grid.lua
 ```
 
-Choose an unused filename if `video-touch.lua` already exists. The player discovers directly attached and wired-network Advanced Monitors and chooses the largest wall that fits the current 143x52-character recordings. It uses text scale **1.0 for the menu** when the display has enough room, and switches to **0.5 for playback** to preserve the recording's full resolution. Smaller screens use a compact menu at 0.5, with a clear size error if a recording does not fit. With no Advanced Monitor connected, the menu stays on the computer for keyboard use. The R2 catalogue URL is already configured.
+Choose an unused filename if `video-grid.lua` already exists. The player discovers directly attached and wired-network Advanced Monitors and chooses the largest wall that fits the current 143x52-character recordings. It uses text scale **1.0 for the menu** when the display has enough room, and switches to **0.5 for playback** to preserve the recording's full resolution. Smaller screens use a compact menu at 0.5, with a clear size error if a recording does not fit. With no Advanced Monitor connected, the menu stays on the computer for keyboard use. The R2 catalogue URL is already configured.
 
-If several displays are connected and you want a particular wall, run `set video.monitor monitor_5` with its peripheral name, then launch the player. Use `set video.monitor nil` to return to automatic selection. The old `monitor MONITOR_NAME video-touch.lua` command still works, keeps its explicitly chosen monitor, and configures its scale automatically. Quit, errors and Ctrl+T restore the previous terminal. Touches on other monitors and mouse clicks in the computer GUI do not control an automatically selected wall.
+If several displays are connected and you want a particular wall, run `set video.monitor monitor_5` with its peripheral name, then launch the player. Use `set video.monitor nil` to return to automatic selection. The old `monitor MONITOR_NAME video-grid.lua` command still works, keeps its explicitly chosen monitor, and configures its scale automatically. Quit, errors and Ctrl+T restore the previous terminal. Touches on other monitors and mouse clicks in the computer GUI do not control an automatically selected wall.
 
 To run at computer boot, copy the player to an unused startup filename:
 
 ```text
-copy video-touch.lua startup.lua
+copy video-grid.lua startup.lua
 ```
 
-If this computer already has a startup script, use `shell.run("video-touch.lua")` in that script instead. If you previously copied the whole old player into `startup.lua`, replace that player copy with the updated version.
+If this computer already has a startup script, use `shell.run("video-grid.lua")` in that script instead. If you previously copied the whole old player into `startup.lua`, replace that player copy with the updated version.
 
-Tap anywhere on a video card to play, including its header, title, size label or PLAY area. The SCADA-inspired menu uses dark panels, cyan selection accents and full-height Previous, Next, Refresh and Quit buttons. Long titles wrap across two lines on the wall. Page buttons are disabled when there is no previous/next page; spaces between cards do not start playback. The layout adapts to smaller computer screens and monitor resizing.
+Tap anywhere on a video card to play, including its header, title, size label or PLAY area. The SCADA-inspired menu uses dark panels and cyan selection accents, with **six cards per page in a 3x2 grid on the 7x4 wall**. Wider displays fit four columns (eight cards at the same height), and a standard computer uses two columns. Long titles wrap within each card. Previous, Next, Refresh and Quit are compact buttons, two character rows tall and at most eleven columns wide. Page buttons are disabled when there is no previous/next page; spaces between cards and empty cells do not start playback. The layout adapts to smaller screens and monitor resizing.
 
-Use Up/Down and Enter from the computer for keyboard selection. Touch during playback or press Backspace to stop and return to the menu. Completed videos return automatically, with the larger menu scale and its palette restored. Left/Right changes pages, R refreshes, and Q quits.
+Use arrow keys to move through the grid and Enter to play. Page Up/Page Down or the mouse wheel changes pages, R refreshes, and Q quits. Touch during playback or press Backspace to stop and return to the menu. Completed videos return automatically, with the larger menu scale and its palette restored.
 
 ![Touch menu on a 7x4 monitor wall](previews/menu-7x4.png)
 
-This preview renders the actual Lua menu's character cells with the installed CC:Tweaked font and an example catalogue; it is not an in-world screenshot. A [compact computer preview](previews/menu-computer.png) is also available.
+This preview renders the actual Lua menu's character cells with the installed CC:Tweaked font and the three-recording catalogue; it is not an in-world screenshot. [Six-card](previews/menu-six-cards.png), [eight-card](previews/menu-eight-cards.png) and [compact computer](previews/menu-computer.png) previews are also available. The full-page previews add placeholder entries only for illustration; these examples are not uploaded to R2.
 
-The menu lists the `.32vid` objects under `videos/` in the dedicated `craftoria-video-player` R2 bucket. A Cloudflare Worker builds the catalogue dynamically, follows R2 pagination, and streams recordings from the bucket. Upload or delete a converted recording in that prefix, then click Refresh to update the menu. Each row includes the file size. See [R2 deployment and upload instructions](r2/README.md).
+The menu lists the `.32vid` objects under `videos/` in the dedicated `craftoria-video-player` R2 bucket. A Cloudflare Worker builds the catalogue dynamically, follows R2 pagination, and streams recordings from the bucket. Upload or delete a converted recording in that prefix, then click Refresh to update the menu. Each card includes the file size. See [R2 deployment and upload instructions](r2/README.md).
 
 HTTP access must allow `craftoria-video-player.raftoria.workers.dev`. The list loads on launch and on explicit refresh; playback uses the current session's list. A failed refresh keeps the previous list and displays the error. Video files are downloaded over HTTP and are not saved to the computer disk. The player retains its GitHub source adapter for migration and continues to accept direct file/URL arguments.
 
 ## Play Wii Shop Bling
 
-Use the updated `video-touch.lua`; monitor discovery and scale setup are automatic:
+Use the updated `video-grid.lua`; monitor discovery and scale setup are automatic:
 
 ```text
-video-touch.lua https://craftoria-video-player.raftoria.workers.dev/videos/wii-shop-bling.32vid
+video-grid.lua https://craftoria-video-player.raftoria.workers.dev/videos/wii-shop-bling.32vid
 ```
 
 Hold Ctrl+T in the computer GUI to stop the previous recording before entering the new command. The new recording starts at the beginning; the YouTube radio playlist is not included.
@@ -48,7 +48,7 @@ Hold Ctrl+T in the computer GUI to stop the previous recording before entering t
 For a new computer, download the player first:
 
 ```text
-wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-touch.lua
+wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-grid.lua
 ```
 
 The ten-second test clip has been removed from R2 and GitHub; click Refresh in the menu to update the list.
@@ -75,7 +75,7 @@ The current R2 recordings use **24-30 FPS**, 286x156 subpixels (143 columns x 52
 
 Use 28 joined Advanced Monitors, one dedicated Advanced Computer and one connected Speaker. The computer may touch the wall directly or connect over wired modems and Networking Cable. HTTP playback avoids writing the full recording to the computer disk. The server must permit the configured R2 Worker hostname.
 
-The current higher frame rate recordings are hosted on R2. The GitHub v1.1.0 release retains the original 7 FPS Wii recording; its root `manifest.json` and `verification.json` describe that historical version. Test clips were removed from hosting. Current R2 conversion, checksum and simulated playback results are under `recordings/`. `menu-verification.json` records checks using the installed CC:Tweaked scheduler and monitor program with simulated peripherals and catalogues: full card/button touch targets, automatic monitor selection, menu/playback scale switching, responsive layout bounds, resize handling, touch isolation, terminal restoration, pinned displays, legacy launches, disconnection/termination cleanup, keyboard selection, pagination, refresh, errors, stopping, replay and audio state. The Worker checks cover catalogue pagination, exact download bytes, metadata, and route restrictions. The R2 menu, playback and automatic monitor startup were confirmed working in-world by the user; the new touch layout was checked with simulated peripherals and rendered for visual review.
+The current higher frame rate recordings are hosted on R2. The GitHub v1.1.0 release retains the original 7 FPS Wii recording; its root `manifest.json` and `verification.json` describe that historical version. Test clips were removed from hosting. Current R2 conversion, checksum and simulated playback results are under `recordings/`. `menu-verification.json` records checks using the installed CC:Tweaked scheduler and monitor program with simulated peripherals and catalogues: six/eight-card grids, sparse final pages, spatial keyboard navigation, full card/button touch targets, automatic monitor selection, menu/playback scale switching, responsive layout bounds, resize handling, touch isolation, terminal restoration, pinned displays, legacy launches, disconnection/termination cleanup, keyboard selection, pagination, refresh, errors, stopping, replay and audio state. The Worker checks cover catalogue pagination, exact download bytes, metadata, and route restrictions. The R2 menu, playback and automatic monitor startup were confirmed working in-world by the user; the compact grid layout was checked with simulated peripherals and rendered for visual review.
 
 ## Upstream and licensing
 

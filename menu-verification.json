@@ -1,7 +1,7 @@
 {
   "passed": [
     "GitHub release/asset pagination and filtering",
-    "Menu pagination and keyboard selection",
+    "Grid pagination and spatial keyboard selection on a computer",
     "Real monitor touches, stop/restart cleanup, complete audio, fresh DFPWM state",
     "Refresh updates library; rate-limit recovery preserves selection",
     "Empty library and malformed GitHub responses",
@@ -12,8 +12,10 @@
     "Automatic monitor termination/disconnection closes playback and restores the computer terminal",
     "Small walls show the menu and report actual recording dimensions without cropping",
     "Entire video cards accept edge/corner touches; menu/video scale switches preserve playback resolution",
-    "Large navigation/refresh/quit buttons accept full-height edge touches",
+    "Compact two-row navigation/refresh/quit buttons accept full rectangle touches",
     "Responsive compact/monitor layouts remain in bounds and disabled page buttons ignore touches",
+    "Six/eight-card grids map every tile to the correct video; empty final-page cells ignore touches",
+    "Arrow keys move horizontally and vertically through the grid",
     "Monitor resizing reflows cards and falls back to a readable fitting menu scale",
     "R2 catalogue pagination, duplicate filtering, monitor playback and removal refresh",
     "R2 malformed catalogue validation and input cleanup"

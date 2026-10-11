@@ -568,9 +568,14 @@ local function menu()
         local width, height = term.getSize()
         if width < 36 or height < 12 then error("Menu needs at least 36 columns and 12 rows. Use a larger Advanced Monitor.", 0) end
         local roomy = height >= 24
-        local cardHeight = roomy and 4 or (height >= 16 and 3 or 2)
-        local contentY, contentEnd = roomy and 5 or 4, height - (roomy and 8 or 6)
-        local capacity = math.max(1, math.floor((contentEnd - contentY + 2) / (cardHeight + 1)))
+        local contentY, contentEnd = roomy and 5 or 4, height - 6
+        local gap, availableWidth = 2, width - 4
+        local columns = math.max(1, math.min(4, math.floor((availableWidth + gap) / 20)))
+        local cardWidth = math.floor((availableWidth - gap * (columns - 1)) / columns)
+        local availableHeight = contentEnd - contentY + 1
+        local rows = math.max(1, math.floor((availableHeight + 1) / (roomy and 7 or 5)))
+        local cardHeight = math.min(7, math.floor((availableHeight - rows + 1) / rows))
+        local capacity = columns * rows
         local pages = math.max(1, math.ceil(#videos / capacity))
         selected = math.max(1, math.min(selected, #videos))
         page = math.min(pages, math.floor((selected - 1) / capacity) + 1)
@@ -589,33 +594,32 @@ local function menu()
         end
         local first = (page - 1) * capacity + 1
         for index = first, math.min(#videos, first + capacity - 1) do
-            local video, y = videos[index], contentY + (index - first) * (cardHeight + 1)
-            local x, cardWidth = 3, width - 4
+            local offset = index - first
+            local video = videos[index]
+            local x = 3 + (offset % columns) * (cardWidth + gap)
+            local y = contentY + math.floor(offset / columns) * (cardHeight + 1)
             local accent = index == selected and colors.cyan or colors.blue
             fill(x, y, cardWidth, cardHeight, colors.gray)
             fill(x, y, 1, cardHeight, accent)
-            if cardHeight > 2 then
-                fill(x + 1, y, cardWidth - 1, 1, colors.blue)
-                writeAt(x + 2, y, string.format("%02d  %s", index, index == selected and "SELECTED" or "VIDEO"),
-                    index == selected and colors.cyan or colors.lightGray, colors.blue)
+            fill(x + 1, y, cardWidth - 1, 1, colors.blue)
+            writeAt(x + 2, y, bounded(string.format("%02d  %s", index, index == selected and "SELECTED" or "VIDEO"), cardWidth - 3),
+                index == selected and colors.cyan or colors.lightGray, colors.blue)
+            for line, text in ipairs(titleLines(video.title, cardWidth - 4, math.max(1, cardHeight - 2))) do
+                writeAt(x + 2, y + line, text, colors.white, colors.gray)
             end
-            local playX, playY = x + cardWidth - 11, cardHeight > 2 and y + 1 or y
-            local playHeight = math.max(1, cardHeight - 2)
-            fill(playX, playY, 10, playHeight, accent)
-            center(playX, playY + math.floor((playHeight - 1) / 2), 10, "PLAY >",
+            local footerY = y + cardHeight - 1
+            fill(x + 1, footerY, cardWidth - 1, 1, colors.blue)
+            writeAt(x + 2, footerY, bounded(string.format("%.1f MB", video.size / 1000000), cardWidth - 10), colors.lightGray, colors.blue)
+            fill(x + cardWidth - 7, footerY, 7, 1, accent)
+            center(x + cardWidth - 7, footerY, 7, "PLAY >",
                 index == selected and colors.black or colors.white, accent)
-            local titleY = cardHeight > 2 and y + 1 or y
-            for line, text in ipairs(titleLines(video.title, cardWidth - 16, math.max(1, cardHeight - 2))) do
-                writeAt(x + 3, titleY + line - 1, text, colors.white, colors.gray)
-            end
-            writeAt(x + 3, y + cardHeight - 1, string.format("%.1f MB", video.size / 1000000), colors.lightGray, colors.gray)
             target(x, y, cardWidth, cardHeight, "play", index)
         end
         if #videos == 0 then
             center(3, contentY, width - 4, statusColor == colors.orange and "LIBRARY UNAVAILABLE" or "YOUR LIBRARY IS EMPTY", colors.lightGray)
         end
 
-        local statusY, buttonY, buttonHeight = height - (roomy and 6 or 4), height - (roomy and 4 or 2), roomy and 3 or 2
+        local statusY, buttonY, buttonHeight = height - 4, height - 2, 2
         fill(3, statusY, width - 4, 1, colors.blue)
         writeAt(4, statusY, bounded(status:gsub("[%c]", " "), width - 6), statusColor, colors.blue)
         local buttons = {
@@ -624,16 +628,17 @@ local function menu()
             {text = "REFRESH", action = "refresh", enabled = true, color = colors.cyan},
             {text = "QUIT", action = "quit", enabled = true, color = colors.red},
         }
-        local gap, x = width >= 60 and 2 or 1, 3
-        local buttonWidth = math.floor((width - 4 - gap * 3) / 4)
-        for index, button in ipairs(buttons) do
-            local w = index == #buttons and width - 1 - x or buttonWidth
+        local buttonGap = width >= 60 and 2 or 1
+        local buttonWidth = math.min(11, math.floor((width - 4 - buttonGap * 3) / 4))
+        local x = math.floor((width - (buttonWidth * 4 + buttonGap * 3)) / 2) + 1
+        for _, button in ipairs(buttons) do
+            local w = buttonWidth
             local background = button.enabled and (button.color or colors.blue) or colors.gray
             fill(x, buttonY, w, buttonHeight, background)
             center(x, buttonY + math.floor((buttonHeight - 1) / 2), w, button.text,
                 button.color and colors.black or (button.enabled and colors.white or colors.lightGray), background)
             if button.enabled then target(x, buttonY, w, buttonHeight, button.action) end
-            x = x + w + gap
+            x = x + w + buttonGap
         end
         local shortcuts = width >= 60 and "  |  Arrows + Enter  |  R refresh, Q quit" or " | Arrows/Enter | R/Q"
         center(1, height, width, "Page " .. page .. "/" .. pages .. shortcuts, colors.lightGray)
@@ -641,12 +646,13 @@ local function menu()
         local event, a, b, c = inputEvent()
         local action, chosen
         if event == "key" then
-            if a == keys.up then selected = math.max(1, selected - 1)
-            elseif a == keys.down then selected = math.min(math.max(1, #videos), selected + 1)
+            if a == keys.up then selected = math.max(1, selected - columns)
+            elseif a == keys.down then selected = math.min(math.max(1, #videos), selected + columns)
+            elseif a == keys.left then selected = math.max(1, selected - 1)
+            elseif a == keys.right then selected = math.min(math.max(1, #videos), selected + 1)
             elseif a == keys.enter or a == keys.numPadEnter then chosen = selected
-            elseif a == keys.left or a == keys.pageUp then action = "prev"
-            elseif a == keys.right or a == keys.pageDown then action = "next" end
-            if a == keys.up or a == keys.down then page = math.floor((selected - 1) / capacity) + 1 end
+            elseif a == keys.pageUp then action = "prev"
+            elseif a == keys.pageDown then action = "next" end
         elseif event == "char" then
             if a:lower() == "r" then action = "refresh"
             elseif a:lower() == "q" then action = "quit" end
