@@ -6,9 +6,16 @@
     "Refresh updates library; rate-limit recovery preserves selection",
     "Empty library and malformed GitHub responses",
     "Invalid recording recovery and Ctrl+T cleanup",
-    "Live unauthenticated GitHub release and asset responses"
+    "R2 catalogue pagination, duplicate filtering, monitor playback and removal refresh",
+    "R2 malformed catalogue validation and input cleanup",
+    "Live unauthenticated GitHub release and asset responses",
+    "Live public R2 Worker catalogue"
   ],
   "live_library": [
+    "Wii Shop Bling",
+    "Wii Shop Bling Test"
+  ],
+  "live_r2_library": [
     "Wii Shop Bling",
     "Wii Shop Bling Test"
   ]

@@ -2,6 +2,10 @@ local bit32_band, bit32_lshift, bit32_rshift, math_frexp = bit32.band, bit32.lsh
 local function log2(n) local _, r = math_frexp(n) return r-1 end
 local dfpwm = require "cc.audio.dfpwm"
 local REPOSITORY = "Mavial/craftoria-video-player"
+local DEFAULT_R2_URL = "https://craftoria-video-player.raftoria.workers.dev/videos.json"
+local function r2URL()
+    return settings.get("video.r2_url") or DEFAULT_R2_URL
+end
 -- Based on MCJack123/sanjuuni 0.5's 32vid-player-mini.lua.
 -- Keep audio decoder state, wait for speaker buffers, and yield between frames.
 local file, speaker
@@ -14,7 +18,7 @@ local function closeInput()
 end
 
 -- Fetch each page, including asset pages, so the library grows without edits.
-local function githubPages(url)
+local function cataloguePages(url)
     local items = {}
     while url do
         local response, message, failed = http.get(url, {
@@ -25,9 +29,9 @@ local function githubPages(url)
             local status = failed and failed.getResponseCode()
             if failed then failed.close() end
             if status == 403 or status == 429 then
-                error("GitHub request limit reached. Wait before refreshing.", 0)
+                error("Source request limit reached. Wait before refreshing.", 0)
             end
-            error(message or "Could not load GitHub videos", 0)
+            error(message or "Could not load video catalogue", 0)
         end
         local ok, body, headers = pcall(function()
             return response.readAll(), response.getResponseHeaders()
@@ -36,7 +40,7 @@ local function githubPages(url)
         if not ok then error(body, 0) end
         local data = textutils.unserialiseJSON(body)
         if type(data) ~= "table" or (body:match("^%s*(.)") ~= "[") then
-            error("GitHub returned an invalid video list", 0)
+            error("Source returned an invalid video list", 0)
         end
         for _, item in ipairs(data) do items[#items + 1] = item end
         local link
@@ -49,11 +53,32 @@ local function githubPages(url)
 end
 
 local function loadLibrary()
-    local releases = githubPages("https://api.github.com/repos/" .. REPOSITORY .. "/releases?per_page=100")
+    local source = r2URL()
+    if source ~= "" then
+        if type(source) ~= "string" or not source:match("^https://[^/]+") then
+            error("video.r2_url must be an HTTPS catalogue URL", 0)
+        end
+        local videos, seen = {}, {}
+        for _, video in ipairs(cataloguePages(source)) do
+            if type(video) ~= "table" or type(video.title) ~= "string" or video.title == ""
+                or type(video.url) ~= "string" or not video.url:match("^https://[^/]+")
+                or type(video.size) ~= "number" or video.size < 0 then
+                error("R2 catalogue contains an invalid video entry", 0)
+            end
+            if not seen[video.url] then
+                seen[video.url] = true
+                videos[#videos + 1] = { title = video.title:gsub("[%c]", " "), url = video.url,
+                    size = video.size, release = "R2" }
+            end
+        end
+        table.sort(videos, function(a, b) return a.title:lower() < b.title:lower() end)
+        return videos
+    end
+    local releases = cataloguePages("https://api.github.com/repos/" .. REPOSITORY .. "/releases?per_page=100")
     local videos, seen = {}, {}
     for _, release in ipairs(releases) do
         if not release.draft then
-            local assets = githubPages(release.assets_url .. "?per_page=100")
+            local assets = cataloguePages(release.assets_url .. "?per_page=100")
             for _, asset in ipairs(assets) do
                 local name, url = asset.name, asset.browser_download_url
                 if type(name) == "string" and name:lower():match("%.32vid$")
@@ -384,7 +409,7 @@ local function menu()
     local videos, selected, page, status = {}, 1, 1, ""
     local function refresh()
         restoreScreen()
-        term.write("Loading videos from GitHub...")
+        term.write("Loading videos from " .. (r2URL() ~= "" and "R2" or "GitHub") .. "...")
         local ok, result = pcall(loadLibrary)
         if ok then
             videos, selected, page = result, 1, 1
@@ -408,7 +433,7 @@ local function menu()
             term.write(text:sub(1, width - x + 1))
         end
         writeAt(2, 1, "CRAFTORIA VIDEO LIBRARY", colors.cyan)
-        writeAt(2, 2, REPOSITORY .. "  |  " .. #videos .. " videos", colors.lightGray)
+        writeAt(2, 2, (r2URL() ~= "" and "Cloudflare R2" or REPOSITORY) .. "  |  " .. #videos .. " videos", colors.lightGray)
         writeAt(2, 3, "Click a video, or use arrows + Enter.")
         writeAt(2, 4, "During playback: click / Backspace to return.", colors.lightGray)
         local first = (page - 1) * capacity + 1

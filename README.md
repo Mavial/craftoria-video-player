@@ -1,34 +1,32 @@
 # Craftoria video player
 
-A CC:Tweaked video player for a **7-wide x 4-high Advanced Monitor wall**, with audio through a connected Speaker. Start without arguments for a GitHub video menu, or supply a local combined `.32vid` file or a direct HTTP(S) download URL.
+A CC:Tweaked video player for a **7-wide x 4-high Advanced Monitor wall**, with audio through a connected Speaker. Start without arguments for a Cloudflare R2 video menu, or supply a local combined `.32vid` file or a direct HTTP(S) download URL.
 
 ## Open the video menu
 
 Stop the existing player with Ctrl+T. Update the script and launch it with the same monitor name as your working test:
 
 ```text
-wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-new.lua
-move video.lua video-backup.lua
-move video-new.lua video.lua
+wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-r2.lua
 monitor scale MONITOR_NAME 0.5
-monitor MONITOR_NAME video.lua
+monitor MONITOR_NAME video-r2.lua
 ```
 
-Choose unused temporary and backup filenames if those files already exist. For a new computer, download directly to `video.lua` and skip the two moves.
+Choose an unused filename if `video-r2.lua` already exists. The R2 catalogue URL is configured in the script, so no further source setting is needed.
 
 Click a video on the monitor, or use Up/Down and Enter from the computer. Click during playback or press Backspace to stop and return to the menu. Completed videos return automatically. The menu also has clickable Previous, Next, Refresh and Quit buttons; Left/Right changes pages, R refreshes, and Q quits.
 
-The menu reads every published release and its assets from this repository using GitHub's public API. It follows release and asset pagination and lists all uploaded `.32vid` files, including test clips. Deleted files and drafts do not appear. Upload future converted videos as release assets, then click Refresh to see them without editing the script. Asset labels become menu titles; otherwise the filename supplies the title. Each row includes its release tag and size.
+The menu lists the `.32vid` objects under `videos/` in the dedicated `craftoria-video-player` R2 bucket, including test clips. A Cloudflare Worker builds the catalogue dynamically, follows R2 pagination, and streams recordings from the bucket. Upload or delete a converted recording in that prefix, then click Refresh to update the menu. Each row includes the file size. See [R2 deployment and upload instructions](r2/README.md).
 
-HTTP access must allow `api.github.com` as well as GitHub's download hosts. The list loads on launch and on explicit refresh; playback uses the current session's list. A failed refresh keeps the previous list and displays the error. A GitHub request limit can be retried later. Video files stream over HTTP and are not saved to the computer disk.
+HTTP access must allow `craftoria-video-player.raftoria.workers.dev`. The list loads on launch and on explicit refresh; playback uses the current session's list. A failed refresh keeps the previous list and displays the error. Video files are downloaded over HTTP and are not saved to the computer disk. The player retains its GitHub source adapter for migration and continues to accept direct file/URL arguments.
 
 ## Play Wii Shop Bling
 
-Use your existing `video.lua` and the same monitor name as your working test:
+Use the updated `video-r2.lua` and the same monitor name as your working test:
 
 ```text
 monitor scale MONITOR_NAME 0.5
-monitor MONITOR_NAME video.lua https://github.com/Mavial/craftoria-video-player/releases/download/v1.1.0/wii-shop-bling.32vid
+monitor MONITOR_NAME video-r2.lua https://craftoria-video-player.raftoria.workers.dev/videos/wii-shop-bling.32vid
 ```
 
 Hold Ctrl+T in the computer GUI to stop the previous recording before entering the new command. The new recording starts at the beginning; the YouTube radio playlist is not included.
@@ -36,13 +34,13 @@ Hold Ctrl+T in the computer GUI to stop the previous recording before entering t
 For a new computer, download the player first:
 
 ```text
-wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video.lua
+wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-r2.lua
 ```
 
 Use `peripherals` to discover the monitor name. The test clip is available at:
 
 ```text
-monitor MONITOR_NAME video.lua https://github.com/Mavial/craftoria-video-player/releases/download/v1.1.0/wii-shop-bling-test.32vid
+monitor MONITOR_NAME video-r2.lua https://craftoria-video-player.raftoria.workers.dev/videos/wii-shop-bling-test.32vid
 ```
 
 ## Recording and hardware
@@ -51,9 +49,9 @@ Source: [Wii Shop Bling, uploaded by eck](https://www.youtube.com/watch?v=gYOEyz
 
 The recording uses **7 FPS**, 286x156 subpixels (143 columns x 52 rows at text scale 0.5), ANS video compression and mono 48 kHz DFPWM audio. It covers the complete video, with final-frame and silent padding to 244 seconds. The encoded picture is letterboxed rather than stretched. The full file is kept below the inspected local 16 MiB HTTP response limit; the dedicated server's active configuration can differ.
 
-Use 28 joined Advanced Monitors, one dedicated Advanced Computer and one connected Speaker. The computer may touch the wall directly or connect over wired modems and Networking Cable. HTTP playback avoids writing the full recording to the computer disk. The server must permit GitHub and its release-download redirect hosts.
+Use 28 joined Advanced Monitors, one dedicated Advanced Computer and one connected Speaker. The computer may touch the wall directly or connect over wired modems and Networking Cable. HTTP playback avoids writing the full recording to the computer disk. The server must permit the configured R2 Worker hostname.
 
-Release assets contain the full recording, a ten-second test and SHA-256 checksums. `manifest.json` records exact dimensions, frame count, duration and file hashes. `verification.json` records simulated file/HTTP playback, monitor output and Speaker backpressure checks. `menu-verification.json` records menu checks with the installed CC:Tweaked scheduler and monitor program, covering clicks, keyboard selection, pagination, refresh, errors, stopping, replay and audio state, plus the live public GitHub library. The earlier player and wall were confirmed in-world; the new menu still needs an in-world check.
+Release assets contain the full recording, a ten-second test and SHA-256 checksums. `manifest.json` records exact dimensions, frame count, duration and file hashes. `verification.json` records simulated file/HTTP playback, monitor output and Speaker backpressure checks. `menu-verification.json` records menu checks with the installed CC:Tweaked scheduler and monitor program, covering clicks, keyboard selection, pagination, refresh, errors, stopping, replay and audio state, plus the live public GitHub and R2 libraries. The Worker checks cover catalogue pagination, exact download bytes, metadata, and route restrictions. The earlier player and wall were confirmed in-world; the new menu still needs an in-world check.
 
 ## Upstream and licensing
 
