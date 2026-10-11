@@ -1,26 +1,31 @@
 {
   "full": {
-    "file": "pacer.32vid",
-    "bytes": 9290276,
-    "video_frames": 887,
-    "audio_seconds": 887.0,
+    "file": "wii-shop-bling.32vid",
+    "bytes": 15214238,
+    "video_frames": 1708,
+    "audio_seconds": 244.0,
     "columns": 143,
     "rows": 52,
-    "fps": 1
+    "fps": 7,
+    "sha256": "ec450a960de6b700556a9f1add4a58f5bf43be9415b47e2c40fbf10a2202fe6a"
   },
   "test": {
-    "file": "pacer-test.32vid",
-    "bytes": 73546,
-    "video_frames": 10,
+    "file": "wii-shop-bling-test.32vid",
+    "bytes": 629492,
+    "video_frames": 70,
     "audio_seconds": 10.0,
     "columns": 143,
     "rows": 52,
-    "fps": 1
+    "fps": 7,
+    "sha256": "2aa77f48061b89b57171d9d128486b4bbeac38bcc0211cef834f804a925e0d65"
   },
-  "source_start_seconds": 14,
-  "source_id": "Y82jDHRrswc",
+  "source_start_seconds": 0,
+  "source_id": "gYOEyzBFYa4",
+  "source_title": "Wii Shop Bling",
+  "source_channel": "eck",
   "assumed_wall_blocks": [
     7,
     4
-  ]
+  ],
+  "release": "v1.1.0"
 }
