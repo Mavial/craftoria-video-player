@@ -1,0 +1,15 @@
+{
+  "passed": [
+    "GitHub release/asset pagination and filtering",
+    "Menu pagination and keyboard selection",
+    "Real monitor touches, stop/restart cleanup, complete audio, fresh DFPWM state",
+    "Refresh updates library; rate-limit recovery preserves selection",
+    "Empty library and malformed GitHub responses",
+    "Invalid recording recovery and Ctrl+T cleanup",
+    "Live unauthenticated GitHub release and asset responses"
+  ],
+  "live_library": [
+    "Wii Shop Bling",
+    "Wii Shop Bling Test"
+  ]
+}
