@@ -1,0 +1,34 @@
+{
+  "full": {
+    "file": "wii-shop-bling.32vid",
+    "bytes": 60284886,
+    "video_frames": 7320,
+    "audio_seconds": 244,
+    "columns": 143,
+    "rows": 52,
+    "fps": 30,
+    "sha256": "451a0b916cebb42f3d44e71e5d2786bbad06c3043b2043faa5f62f78e7a26fa4"
+  },
+  "source_id": "gYOEyzBFYa4",
+  "source_title": "Wii Shop Bling",
+  "source_channel": "eck",
+  "source_start_seconds": 0,
+  "assumed_wall_blocks": [
+    7,
+    4
+  ],
+  "test_hosted": false,
+  "source_url": "https://www.youtube.com/watch?v=gYOEyzBFYa4",
+  "download_url": "https://craftoria-video-player.raftoria.workers.dev/videos/wii-shop-bling.32vid",
+  "validation": {
+    "samples": 11712000,
+    "blits": 380640,
+    "retries": 7,
+    "accepted_chunks": 488,
+    "file_closed": true,
+    "file": "wii-shop-bling.32vid",
+    "mode": "file fixture"
+  },
+  "public_download_sha256_verified": true,
+  "server_http_limit_bytes": 67108864
+}

@@ -16,6 +16,12 @@ TEST_TMP.mkdir(parents=True, exist_ok=True)
 
 
 class UploadTests(unittest.TestCase):
+    def test_frame_rates_respect_source_and_fall_back_within_requested_cap(self):
+        self.assertEqual(upload.frame_rates(30, '25/1'), [25, 24, 20, 15, 10, 7, 5, 3, 2, 1])
+        self.assertEqual(upload.frame_rates(30, '30000/1001')[0], 30)
+        self.assertEqual(upload.frame_rates(7, '60/1'), [7, 5, 3, 2, 1])
+        self.assertEqual(upload.frame_rates(30, '0/0')[0], 30)
+
     def test_hls_selection_and_normal_format_fallback(self):
         formats = [dict(format_id='231', protocol='m3u8_native', vcodec='h264', height=480),
                    dict(format_id='232', protocol='m3u8_native', vcodec='h264', height=720),

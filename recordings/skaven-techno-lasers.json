@@ -1,13 +1,13 @@
 {
   "full": {
     "file": "skaven-techno-lasers.32vid",
-    "bytes": 14119068,
-    "video_frames": 1463,
-    "audio_seconds": 209.0,
+    "bytes": 46009476,
+    "video_frames": 5016,
+    "audio_seconds": 209,
     "columns": 143,
     "rows": 52,
-    "fps": 7,
-    "sha256": "6902a94026ba123964e2ca40869c05bb9d2b120242e29b8e7321492e7637f3ad"
+    "fps": 24,
+    "sha256": "b9bc79bc2202d02cae596ec469cadd74618dba71d57f1489b7cd460c602c1842"
   },
   "source_id": "TXCUenE0b5A",
   "source_title": "SKAVEN TECHNO LASERS / Francis E Dec Remix",
@@ -22,12 +22,13 @@
   "download_url": "https://craftoria-video-player.raftoria.workers.dev/videos/skaven-techno-lasers.32vid",
   "validation": {
     "samples": 10032000,
-    "blits": 76076,
+    "blits": 260832,
     "retries": 7,
     "accepted_chunks": 418,
     "file_closed": true,
     "file": "skaven-techno-lasers.32vid",
     "mode": "file fixture"
   },
-  "public_download_sha256_verified": true
+  "public_download_sha256_verified": true,
+  "server_http_limit_bytes": 67108864
 }

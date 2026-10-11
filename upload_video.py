@@ -1,6 +1,7 @@
 """Convert one video for the Craftoria monitor and upload it to Cloudflare R2."""
 from argparse import ArgumentParser
 from datetime import datetime
+from fractions import Fraction
 from pathlib import Path
 import hashlib
 import json
@@ -20,7 +21,7 @@ import uuid
 ROOT = Path(__file__).resolve().parent
 DEFAULT_BASE = 'https://craftoria-video-player.raftoria.workers.dev'
 DEFAULT_BUCKET = 'craftoria-video-player'
-MAX_BYTES = 16 * 1024 * 1024 - 1
+MAX_BYTES = 64 * 1024 * 1024 - 1
 USER_AGENT = 'Craftoria-Video-Uploader/1.0'
 
 
@@ -102,6 +103,17 @@ def prefer_hls(info):
     return 'bv*[height<=480]+ba/b'
 
 
+def frame_rates(max_fps, source_rate):
+    try:
+        natural_fps = round(Fraction(source_rate))
+        if natural_fps > 0:
+            max_fps = min(max_fps, natural_fps)
+    except (ValueError, TypeError, ZeroDivisionError):
+        pass
+    return sorted({max_fps, *(fps for fps in (30, 25, 24, 20, 15, 10, 7, 5, 3, 2, 1)
+                              if fps <= max_fps)}, reverse=True)
+
+
 def package_video(converted, audio_path, output, seconds, fps, max_bytes):
     data, audio = converted.read_bytes(), audio_path.read_bytes()
     if len(data) < 21 or struct.unpack_from('<4sHHBBH', data) != (b'32VD', 143, 52, fps, 1, 21):
@@ -156,8 +168,10 @@ def parser():
     result.add_argument('--name', help='Menu filename, using letters, numbers and hyphens')
     result.add_argument('--start', type=float, default=0, help='Start time in seconds')
     result.add_argument('--duration', type=float, help='Convert only this many seconds')
-    result.add_argument('--max-fps', type=int, default=10, choices=range(1, 11))
-    result.add_argument('--max-bytes', type=int, default=MAX_BYTES)
+    result.add_argument('--max-fps', type=int, default=30, choices=range(1, 31),
+                        help='Maximum frame rate (default: 30; also capped to the source frame rate)')
+    result.add_argument('--max-bytes', type=int, default=MAX_BYTES,
+                        help='Maximum recording size in bytes (default: 64 MiB minus one byte)')
     result.add_argument('--bucket', default=DEFAULT_BUCKET)
     result.add_argument('--base-url', default=DEFAULT_BASE)
     result.add_argument('--work-dir', type=Path, help='Directory for retained source and conversion files')
@@ -235,7 +249,8 @@ def main(argv=None):
     audio_path = work / 'audio.dfpwm'
     run([ffmpeg, '-y', '-hide_banner', '-loglevel', 'error', *audio_inputs, '-vn', '-af', 'apad', '-t', str(seconds),
         '-ac', '1', '-ar', '48000', '-c:a', 'dfpwm', '-f', 'dfpwm', str(audio_path)], work)
-    candidates = sorted({args.max_fps, *(fps for fps in (10, 7, 5, 3, 2, 1) if fps <= args.max_fps)}, reverse=True)
+    video_stream = next(s for s in probe['streams'] if s['codec_type'] == 'video')
+    candidates = frame_rates(args.max_fps, video_stream.get('avg_frame_rate', '0/0'))
     output = work / (name + '.32vid')
     for fps in candidates:
         print(f'Converting {seconds}s at {fps} FPS...', flush=True)

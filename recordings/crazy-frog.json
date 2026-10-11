@@ -1,0 +1,33 @@
+{
+  "full": {
+    "file": "crazy-frog-axel-f-official-video-k85mrpqvmbe.32vid",
+    "bytes": 43288340,
+    "video_frames": 4300,
+    "audio_seconds": 172,
+    "columns": 143,
+    "rows": 52,
+    "fps": 25,
+    "sha256": "0a1cc2e8faec5b7fce37a41a5943a3ef7c72fb57a615d0ae9dab90ac07f8140d"
+  },
+  "source_id": "k85mRPqvMbE",
+  "source_title": "Crazy Frog - Axel F (Official Video)",
+  "source_url": "https://www.youtube.com/watch?v=k85mRPqvMbE",
+  "source_start_seconds": 0,
+  "assumed_wall_blocks": [
+    7,
+    4
+  ],
+  "test_hosted": false,
+  "download_url": "https://craftoria-video-player.raftoria.workers.dev/videos/crazy-frog-axel-f-official-video-k85mrpqvmbe.32vid",
+  "validation": {
+    "samples": 8256000,
+    "blits": 223600,
+    "retries": 7,
+    "accepted_chunks": 344,
+    "file_closed": true,
+    "file": "crazy-frog-axel-f-official-video-k85mrpqvmbe.32vid",
+    "mode": "file fixture"
+  },
+  "public_download_sha256_verified": true,
+  "server_http_limit_bytes": 67108864
+}

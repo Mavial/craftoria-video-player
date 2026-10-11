@@ -12,7 +12,9 @@ You can use a local video instead:
 python .\video-player\upload_video.py "C:\Videos\my-video.mp4" --name my-video
 ```
 
-The script downloads a single video, fits it to the existing 7x4 Advanced Monitor wall, converts mono audio, and tries 10, 7, 5, 3, 2 and 1 FPS until the combined `.32vid` recording fits below 16 MiB. It uploads only the full recording to the `videos/` prefix in `craftoria-video-player`, then downloads it again to verify SHA-256 and byte count. Click Refresh in Minecraft to see it. Video titles in the menu come from the resulting filename.
+The script downloads a single video, fits it to the existing 7x4 Advanced Monitor wall, converts mono audio, and starts at **up to 30 FPS**, capped to the source frame rate. If needed, it tries lower rates (25, 24, 20, 15, 10, 7, 5, 3, 2 and 1 FPS) until the combined `.32vid` recording fits below **64 MiB**. It uploads only the full recording to the `videos/` prefix in `craftoria-video-player`, then downloads it again to verify SHA-256 and byte count. Click Refresh in Minecraft to see it. Video titles in the menu come from the resulting filename.
+
+The default size budget is 67,108,863 bytes, one byte below the server's user-reported `max_download = 67108864` setting. It applies to the complete video and audio together. If uploading for another server, use `--max-bytes` to match its HTTP download limit; for a 16 MiB server, use `--max-bytes 16777215`.
 
 Source, intermediate files, conversion logs and `manifest.json` are retained in a new `publish/uploads/` directory for each run. These files are ignored by Git. A failed command exits with an error and preserves the working files. The script validates packet boundaries, frame count, duration and complete audio before upload. It does not run the Lua player on each future upload; the shared format and conversion path have been checked against the actual player.
 
@@ -28,7 +30,7 @@ python .\video-player\upload_video.py "YOUTUBE_URL" --start 30 --duration 60
 # Convert locally and inspect the result before uploading:
 python .\video-player\upload_video.py "YOUTUBE_URL" --no-upload
 
-# Use a maximum of 7 FPS to skip the initial 10 FPS attempt:
+# Use a maximum of 7 FPS to skip the higher frame-rate attempts:
 python .\video-player\upload_video.py "YOUTUBE_URL" --max-fps 7
 
 # Explicitly replace a previously uploaded filename:
@@ -38,7 +40,7 @@ python .\video-player\upload_video.py "YOUTUBE_URL" --name my-video --overwrite
 python .\video-player\upload_video.py --login
 ```
 
-Without `--overwrite`, an existing public file causes the script to stop before conversion/upload. Uploads and checksum checks require internet access. YouTube playlists/radio links are treated as a single linked video, starting at the beginning unless `--start` is provided. YouTube's source file is downloaded in full even when requesting a shorter clip. Very long recordings need `--duration`; moving to R2 does not remove the Minecraft server's download limit.
+Without `--overwrite`, an existing public file causes the script to stop before conversion/upload. Uploads and checksum checks require internet access. YouTube playlists/radio links are treated as a single linked video, starting at the beginning unless `--start` is provided. YouTube's source file is downloaded in full even when requesting a shorter clip. Recordings that exceed the size budget even at 1 FPS need a shorter `--duration`; moving to R2 does not remove the Minecraft server's download limit.
 
 ## Set up another PC
 

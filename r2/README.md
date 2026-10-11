@@ -16,7 +16,7 @@ For a YouTube URL or local MP4, the [automatic uploader](../UPLOADING.md) handle
 npx wrangler r2 object put "craftoria-video-player/videos/example.32vid" --file "C:\path\example.32vid" --content-type application/octet-stream --remote
 ```
 
-Keep recordings within the Minecraft server's HTTP download limit. The current full recording is 15,214,238 bytes. Filenames supply menu titles; optional R2 custom metadata `title` overrides the generated title.
+Keep recordings within the Minecraft server's HTTP download limit. The configured server now allows 64 MiB per request (`max_download = 67108864`, reported by the user); the automatic uploader defaults to one byte below this. The player and Worker impose no additional 16 MiB cap. Filenames supply menu titles; optional R2 custom metadata `title` overrides the generated title.
 
 Deploy changes from this directory with `npx wrangler deploy`. Run the Worker checks with `node --test worker.test.mjs`.
 
