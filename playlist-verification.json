@@ -1,0 +1,16 @@
+{
+  "passed": [
+    "Both edges of all IN/OUT badges on six/eight-card grids and sparse pages save without starting playback",
+    "Keyboard exclusions persist by URL across restart/rename, failed saves roll back, malformed settings are ignored, excluded videos still play individually",
+    "All-excluded library disables the header action and safely rejects keyboard loop requests",
+    "Alphabetical included queue wraps after a full pass; two complete ten-second clips preserve all audio, fresh decoder state, picture frames and final drain",
+    "Shuffle creates a fresh permutation each pass and includes every enabled recording exactly once",
+    "Between-pass catalogue refresh includes new URLs, removes deleted videos, retains exclusions and keeps a usable queue on malformed/rate-limited refreshes",
+    "Unavailable clips are skipped; all failed or subsequently removed clips return to the library without retrying forever",
+    "Stop works during downloads, final audio drain, between clips and catalogue refresh; touch preference is respected and loading back button remains active",
+    "Playlist order/startup Save and Cancel, startup inclusion filtering, empty startup and paginated/compact layout bounds",
+    "Ctrl+T and monitor disconnection stop outputs, close input and restore the computer terminal",
+    "Menu refresh pauses during looping and is rearmed on return"
+  ],
+  "scope": "Simulated peripherals, HTTP and event timing; installed CC:Tweaked ROM scheduler and DFPWM decoder. In-world commissioning remains necessary."
+}

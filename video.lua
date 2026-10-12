@@ -15,11 +15,11 @@ local restoreScreen
 local outputs, startupNotice = {}, nil
 local configDefaults = {volume = 1, muted = false, speakers = "auto", speaker = "",
     monitor = "", scale = "auto", columns = 0, touchStop = true, startup = "menu", refresh = 0,
-    r2_url = DEFAULT_R2_URL}
+    r2_url = DEFAULT_R2_URL, playOrder = "alphabetical"}
 local configKeys = {volume = "video.volume", muted = "video.muted", speakers = "video.speakers",
     speaker = "video.speaker", monitor = "video.monitor", scale = "video.menu_scale",
     columns = "video.columns", touchStop = "video.touch_stop", startup = "video.startup",
-    refresh = "video.refresh_minutes", r2_url = "video.r2_url"}
+    refresh = "video.refresh_minutes", r2_url = "video.r2_url", playOrder = "video.playlist_order"}
 local function copy(value) local result = {}; for key, item in pairs(value) do result[key] = item end; return result end
 local function readConfig()
     local result = copy(configDefaults)
@@ -31,11 +31,19 @@ local function readConfig()
     if result.speakers ~= "auto" and result.speakers ~= "all" and result.speakers ~= "chosen" then result.speakers = "auto" end
     if result.scale ~= "auto" and result.scale ~= "0.5" and result.scale ~= "1" and result.scale ~= "1.5" then result.scale = "auto" end
     if result.columns ~= 0 and result.columns ~= 2 and result.columns ~= 3 and result.columns ~= 4 then result.columns = 0 end
-    if result.startup ~= "loop" then result.startup = "menu" end
+    if result.startup ~= "loop" and result.startup ~= "library" then result.startup = "menu" end
+    if result.playOrder ~= "shuffle" then result.playOrder = "alphabetical" end
     if result.refresh ~= 5 and result.refresh ~= 15 and result.refresh ~= 60 then result.refresh = 0 end
     return result
 end
 local config = readConfig()
+local excluded = {}
+local savedExclusions = settings.get("video.excluded")
+if type(savedExclusions) == "table" then
+    for url, value in pairs(savedExclusions) do
+        if type(url) == "string" and value == true then excluded[url] = true end
+    end
+end
 local function saveValues(values)
     local previous = {}
     for name, value in pairs(values) do previous[name] = settings.get(name); settings.set(name, value) end
@@ -260,7 +268,7 @@ restoreScreen = function()
     term.clear()
 end
 
-local function play(path)
+local function play(path, onStart)
     outputs = selectOutputs()
     speaker = outputs[1] and outputs[1].device
     if path:match "^https?://" then
@@ -427,6 +435,7 @@ local function play(path)
     local start, lastyield
     local vframe = 0
     local subs = {}
+    if onStart then onStart() end
     term.clear()
     local function renderVideo()
         start = start or os.epoch "utc"
@@ -599,13 +608,13 @@ local function play(path)
     closeInput()
 end
 
-local function runPlayback(path, canStop, loopVideo)
+local function runPlayback(path, canStop, loopVideo, onStart)
     local stopped = false
     local ok, message = pcall(function()
         if canStop then
             parallel.waitForAny(function()
                 repeat
-                    play(path)
+                    play(path, onStart)
                     -- Yield between repeats even for an empty recording, and
                     -- leave the stop listener active while reloading the URL.
                     if loopVideo then sleep(0) end
@@ -620,7 +629,7 @@ local function runPlayback(path, canStop, loopVideo)
                 end
             end)
         else
-            play(path)
+            play(path, onStart)
         end
     end)
     closeInput()
@@ -634,6 +643,23 @@ end
 local function menu()
     local videos, selected, page, status = {}, 1, 1, ""
     local statusColor, menuScale = colors.lightGray, 0.5
+    local function includedVideos()
+        local queue = {}
+        for _, video in ipairs(videos) do if not excluded[video.url] then queue[#queue + 1] = video end end
+        return queue
+    end
+    local function toggleVideo(video)
+        local updated = copy(excluded)
+        updated[video.url] = not updated[video.url] and true or nil
+        local saved, failure = saveValues({["video.excluded"] = updated})
+        if saved then
+            excluded = updated
+            status = (updated[video.url] and "Excluded: " or "Included: ") .. video.title .. ". Saved."
+            statusColor = colors.lightGray
+        else
+            status, statusColor = "Selection not saved: " .. failure, colors.orange
+        end
+    end
     local palette = {
         {colors.black, 0x14151D}, {colors.gray, 0x343642}, {colors.blue, 0x29364A},
         {colors.lightGray, 0xABABBB}, {colors.white, 0xEEEEF3}, {colors.cyan, 0x5DD6DF},
@@ -701,7 +727,8 @@ local function menu()
         local ok, result = pcall(loadLibrary)
         if ok then
             videos, selected, page = result, 1, 1
-            status = #videos == 0 and "No published videos. Tap REFRESH after uploading." or "Library updated."
+            status = #videos == 0 and "No published videos. Tap REFRESH after uploading."
+                or ("Library updated. " .. #videos .. (#videos == 1 and " video." or " videos."))
             statusColor = colors.lightGray
         else
             if tostring(result) == "Terminated" then error(result, 0) end
@@ -851,9 +878,14 @@ local function menu()
                 row("CONNECTED DISPLAYS", "RESCAN", #discoveredMonitors .. " advanced monitors", rescanAction)
             elseif tab == 3 then
                 row("TAP VIDEO TO STOP", draft.touchStop and "ON" or "OFF", "Backspace always stops playback", function() draft.touchStop = not draft.touchStop; changed() end)
-                row("WHEN PLAYER STARTS", draft.startup == "loop" and "LOOP LAST VIDEO" or "SHOW LIBRARY", "Runs after launch or startup.lua", function()
-                    draft.startup = draft.startup == "menu" and "loop" or "menu"; changed()
+                local startupLabels = {menu = "SHOW LIBRARY", loop = "LOOP LAST VIDEO", library = "LOOP LIBRARY"}
+                row("WHEN PLAYER STARTS", startupLabels[draft.startup], "Runs after launch or startup.lua", function(direction)
+                    draft.startup = cycle({"menu", "loop", "library"}, draft.startup, direction); changed()
                 end)
+                row("PLAYLIST ORDER", draft.playOrder == "shuffle" and "SHUFFLE" or "ALPHABETICAL",
+                    #includedVideos() .. " included; use IN/OUT in menu", function()
+                        draft.playOrder = draft.playOrder == "alphabetical" and "shuffle" or "alphabetical"; changed()
+                    end)
                 row("CARD ACTIONS", "PLAY / LOOP", "Play once / repeat until stopped")
                 row("LAST VIDEO", settings.get("video.last_title") or "NONE YET", "Missing recording returns to library")
             else
@@ -960,10 +992,107 @@ local function menu()
         if startupNotice then status, statusColor = status .. " " .. startupNotice, colors.orange; startupNotice = nil end
         scheduleRefresh()
     end
+    local function runLibraryLoop()
+        if #includedVideos() == 0 then
+            status, statusColor = "Set at least one video to IN to enable LOOP ALL.", colors.orange
+            return
+        end
+        if refreshTimer then os.cancelTimer(refreshTimer); refreshTimer = nil end
+        local stopped, skipped, failure, lastProblem, refreshProblem = false, 0, nil, nil, nil
+        local stopTarget
+        local function loopBusy(queue, index, syncing)
+            setDisplayScale(menuScale)
+            theme()
+            local width, height = term.getSize()
+            fill(1, 1, width, 2, colors.blue)
+            center(1, 1, width, "CRAFTORIA VIDEO LIBRARY", colors.white, colors.blue)
+            center(2, 3, width - 2, "LIBRARY LOOP", colors.green)
+            center(2, 5, width - 2, syncing and "UPDATING LIBRARY" or "LOADING VIDEO", colors.lightGray)
+            center(2, 7, width - 2, syncing and "Checking for new recordings..." or queue[index].title, colors.cyan)
+            center(2, 9, width - 2, index .. "/" .. #queue .. " included | " .. config.playOrder, colors.lightGray)
+            -- Show the upcoming queue when the wall has room, without squeezing
+            -- the loading/stop controls on compact terminals.
+            if height >= 19 and not syncing then
+                local last = math.min(#queue, index + 3, index + height - 15)
+                for position = index, last do
+                    local text = (position == index and "> " or "  ") .. queue[position].title
+                    center(3, 11 + position - index, width - 4, text, position == index and colors.white or colors.lightGray)
+                end
+            end
+            local w = math.min(21, width - 4)
+            local x, y = math.floor((width - w) / 2) + 1, height - 2
+            fill(x, y, w, 2, colors.green)
+            center(x, y, w, "BACK TO LIBRARY", colors.black, colors.green)
+            center(1, height, width, "Backspace stops the loop", colors.lightGray)
+            stopTarget = {x = x, y = y, w = w, h = 2}
+        end
+        local ok, message = pcall(function()
+            parallel.waitForAny(function()
+                while true do
+                    local queue = includedVideos()
+                    if #queue == 0 then failure = "No included videos remain; showing library."; return end
+                    if config.playOrder == "shuffle" then
+                        for index = #queue, 2, -1 do
+                            local chosen = math.random(index)
+                            queue[index], queue[chosen] = queue[chosen], queue[index]
+                        end
+                    end
+                    local played = 0
+                    for index, video in ipairs(queue) do
+                        saveValues({["video.last_url"] = video.url, ["video.last_title"] = video.title})
+                        loopBusy(queue, index, false)
+                        local success, problem = runPlayback(video.url, false, false, function() stopTarget = nil end)
+                        stopTarget = nil
+                        if success then played = played + 1
+                        else skipped, lastProblem = skipped + 1, tostring(problem) end
+                        sleep(0) -- Keep stop input active between clips, even for empty recordings.
+                    end
+                    if played == 0 then
+                        failure = "No included videos could play: " .. (lastProblem or "Unavailable recordings")
+                        return
+                    end
+                    loopBusy(queue, #queue, true)
+                    sleep(0)
+                    local loaded, result = pcall(loadLibrary)
+                    if loaded then
+                        videos, selected, page = result, 1, 1
+                        refreshProblem = nil
+                    else
+                        if tostring(result) == "Terminated" then error(result, 0) end
+                        refreshProblem = tostring(result) -- Keep the previously usable catalogue.
+                    end
+                end
+            end, function()
+                while true do
+                    local event, value, x, y = inputEvent()
+                    local button = event == "mouse_click" and stopTarget and x >= stopTarget.x
+                        and x < stopTarget.x + stopTarget.w and y >= stopTarget.y and y < stopTarget.y + stopTarget.h
+                    if (event == "key" and value == keys.backspace)
+                        or (event == "mouse_click" and config.touchStop) or button then
+                        stopped = true
+                        return
+                    end
+                end
+            end)
+        end)
+        closeInput()
+        stopOutputs()
+        local restored, restoreError = pcall(restoreScreen)
+        if not ok and tostring(message) == "Terminated" then error(message, 0) end
+        if not restored then error(not ok and message or restoreError, 0) end
+        chooseMenuScale()
+        status = not ok and ("Library loop failed: " .. tostring(message))
+            or (stopped and "Library loop stopped." or failure or "Library loop ended.")
+        if skipped > 0 and not failure then status = status .. " Skipped " .. skipped .. " unavailable recording(s)." end
+        if refreshProblem and not failure then status = status .. " Last refresh failed: " .. refreshProblem end
+        statusColor = (not ok or failure or skipped > 0 or refreshProblem) and colors.orange or colors.lightGray
+        scheduleRefresh()
+    end
     selectOutputs() -- Surface a disconnected saved speaker before starting playback.
     refresh()
     if startupNotice then status, statusColor = startupNotice, colors.orange; startupNotice = nil end
-    if config.startup == "loop" then
+    if config.startup == "library" then runLibraryLoop()
+    elseif config.startup == "loop" then
         local last = settings.get("video.last_url")
         local found
         for index, video in ipairs(videos) do if video.url == last then found = index; break end end
@@ -990,16 +1119,22 @@ local function menu()
         theme()
         fill(1, 1, width, roomy and 3 or 2, colors.blue)
         center(1, 1, width, "CRAFTORIA VIDEO LIBRARY", colors.white, colors.blue)
-        local source = r2URL() ~= "" and "Cloudflare R2" or "GitHub"
-        local count = #videos .. (#videos == 1 and " video" or " videos")
-        writeAt(3, roomy and 3 or 2, source, colors.cyan, colors.blue)
+        local source = r2URL() ~= "" and (width < 48 and "R2" or "Cloudflare R2") or "GitHub"
+        local included = #includedVideos()
+        local count = included .. "/" .. #videos .. (width >= 60 and " IN LOOP" or " IN")
+        local loopWidth = math.min(16, math.floor(width * 0.34))
+        local loopX = math.floor((width - loopWidth) / 2) + 1
+        writeAt(3, roomy and 3 or 2, bounded(source, loopX - 4), colors.cyan, colors.blue)
         writeAt(width - #count - 2, roomy and 3 or 2, count, colors.lightGray, colors.blue)
-        if roomy then center(1, 2, width, "PLAY ONCE OR LOOP A VIDEO", colors.lightGray, colors.blue) end
+        local loopColor = included > 0 and colors.green or colors.gray
+        fill(loopX, 2, loopWidth, roomy and 2 or 1, loopColor)
+        center(loopX, 2, loopWidth, "LOOP ALL (" .. included .. ")", included > 0 and colors.black or colors.lightGray, loopColor)
 
         local targets = {}
         local function target(x, y, w, h, action, index)
             targets[#targets + 1] = {x = x, y = y, w = w, h = h, action = action, index = index}
         end
+        if included > 0 then target(loopX, 2, loopWidth, roomy and 2 or 1, "all") end
         local first = (page - 1) * capacity + 1
         for index = first, math.min(#videos, first + capacity - 1) do
             local offset = index - first
@@ -1009,11 +1144,16 @@ local function menu()
             local accent = index == selected and colors.cyan or colors.blue
             fill(x, y, cardWidth, cardHeight, colors.gray)
             fill(x, y, 1, cardHeight, accent)
-            fill(x + 1, y, cardWidth - 1, 1, colors.blue)
-            writeAt(x + 2, y, bounded(string.format("%02d  %.1f MB", index, video.size / 1000000), cardWidth - 3),
+            local toggleHeight = cardHeight >= 6 and 2 or 1
+            local toggleX = x + cardWidth - 5
+            fill(x + 1, y, cardWidth - 1, toggleHeight, colors.blue)
+            writeAt(x + 2, y, bounded(string.format("%02d %.1fMB", index, video.size / 1000000), cardWidth - 8),
                 index == selected and colors.cyan or colors.lightGray, colors.blue)
-            for line, text in ipairs(titleLines(video.title, cardWidth - 4, math.max(1, cardHeight - 2))) do
-                writeAt(x + 2, y + line, text, colors.white, colors.gray)
+            local toggleColor = excluded[video.url] and colors.gray or colors.green
+            fill(toggleX, y, 5, toggleHeight, toggleColor)
+            center(toggleX, y, 5, excluded[video.url] and "OUT" or "IN", excluded[video.url] and colors.lightGray or colors.black, toggleColor)
+            for line, text in ipairs(titleLines(video.title, cardWidth - 4, math.max(1, cardHeight - toggleHeight - 1))) do
+                writeAt(x + 2, y + toggleHeight + line - 1, text, colors.white, colors.gray)
             end
             local footerY = y + cardHeight - 1
             fill(x + 1, footerY, cardWidth - 1, 1, colors.blue)
@@ -1022,7 +1162,8 @@ local function menu()
             fill(x + cardWidth - 7, footerY, 7, 1, accent)
             center(x + cardWidth - 7, footerY, 7, "PLAY >",
                 index == selected and colors.black or colors.white, accent)
-            -- Register the more specific loop button before the whole card.
+            -- Inclusion and loop buttons take priority over whole-card playback.
+            target(toggleX, y, 5, toggleHeight, "toggle", index)
             target(x + 1, footerY, 7, 1, "loop", index)
             target(x, y, cardWidth, cardHeight, "play", index)
         end
@@ -1053,7 +1194,7 @@ local function menu()
             if button.enabled then target(x, buttonY, w, buttonHeight, button.action) end
             x = x + w + buttonGap
         end
-        local shortcuts = width >= 60 and " | Enter play, L loop | S settings | R/Q" or " | Enter/L | S settings | R/Q"
+        local shortcuts = width >= 60 and " | Enter/L | P all | X in/out | S settings | R/Q" or " | Enter/L | P all | X in/out | S"
         center(1, height, width, "Page " .. page .. "/" .. pages .. shortcuts, colors.lightGray)
 
         local event, a, b, c = inputEvent()
@@ -1068,6 +1209,8 @@ local function menu()
             elseif a == keys.pageDown then action = "next" end
         elseif event == "char" then
             if a:lower() == "l" then action, chosen = "loop", selected
+            elseif a:lower() == "p" then action = "all"
+            elseif a:lower() == "x" then action, chosen = "toggle", selected
             elseif a:lower() == "r" then action = "refresh"
             elseif a:lower() == "s" then action = "settings"
             elseif a:lower() == "q" then action = "quit" end
@@ -1087,6 +1230,10 @@ local function menu()
             action = "refresh"
         end
         if action == "quit" then return
+        elseif action == "all" then runLibraryLoop()
+        elseif action == "toggle" then
+            if chosen and videos[chosen] then selected = chosen; toggleVideo(videos[chosen]) end
+            chosen = nil
         elseif action == "refresh" then refresh()
         elseif action == "settings" then settingsScreen()
         elseif action == "prev" then page = math.max(1, page - 1); selected = (page - 1) * capacity + 1

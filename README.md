@@ -7,25 +7,33 @@ A CC:Tweaked video player for a **7-wide x 4-high Advanced Monitor wall**, with 
 Stop the existing player with Ctrl+T. Download the updated script to a fresh filename and launch it directly:
 
 ```text
-wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-settings.lua
-video-settings.lua
+wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-library.lua
+video-library.lua
 ```
 
-Choose an unused filename if `video-settings.lua` already exists. The player discovers directly attached and wired-network Advanced Monitors and chooses the largest wall that fits the current 143x52-character recordings. It uses text scale **1.0 for the menu** when the display has enough room, and switches to **0.5 for playback** to preserve the recording's full resolution. Smaller screens use a compact menu at 0.5, with a clear size error if a recording does not fit. With no Advanced Monitor connected, the menu stays on the computer for keyboard use. The R2 catalogue URL is already configured.
+Choose an unused filename if `video-library.lua` already exists. The player discovers directly attached and wired-network Advanced Monitors and chooses the largest wall that fits the current 143x52-character recordings. It uses text scale **1.0 for the menu** when the display has enough room, and switches to **0.5 for playback** to preserve the recording's full resolution. Smaller screens use a compact menu at 0.5, with a clear size error if a recording does not fit. With no Advanced Monitor connected, the menu stays on the computer for keyboard use. The R2 catalogue URL is already configured.
 
-Use **Settings > Display** to choose a particular wall, or keep automatic selection. The older `set video.monitor monitor_5` setting still works; `set video.monitor nil` enables automatic selection. A disconnected saved selection falls back to automatic discovery and shows a warning. The old `monitor MONITOR_NAME video-settings.lua` command still works and initially keeps its explicitly chosen monitor; changing the display in Settings can switch it during that session. Quit, errors and Ctrl+T restore the previous terminal. Touches on other monitors and mouse clicks in the computer GUI do not control an automatically selected wall.
+Use **Settings > Display** to choose a particular wall, or keep automatic selection. The older `set video.monitor monitor_5` setting still works; `set video.monitor nil` enables automatic selection. A disconnected saved selection falls back to automatic discovery and shows a warning. The old `monitor MONITOR_NAME video-library.lua` command still works and initially keeps its explicitly chosen monitor; changing the display in Settings can switch it during that session. Quit, errors and Ctrl+T restore the previous terminal. Touches on other monitors and mouse clicks in the computer GUI do not control an automatically selected wall.
 
 To run at computer boot, copy the player to an unused startup filename:
 
 ```text
-copy video-settings.lua startup.lua
+copy video-library.lua startup.lua
 ```
 
-If this computer already has a startup script, use `shell.run("video-settings.lua")` in that script instead. If you previously copied the whole old player into `startup.lua`, replace that player copy with the updated version. The **When player starts** preference controls what the player does after launch; a startup script is still needed to launch it automatically at computer boot.
+If this computer already has a startup script, use `shell.run("video-library.lua")` in that script instead. If you previously copied the whole old player into `startup.lua`, replace that player copy with the updated version. The **When player starts** preference controls what the player does after launch; a startup script is still needed to launch it automatically at computer boot.
 
 Tap **PLAY** or a card's header/title to play once. Tap its green **LOOP** button to repeat that recording until stopped. The header shows the file size, and the cyan accent marks the selected card. The SCADA-inspired menu uses dark panels, with **six cards per page in a 3x2 grid on the 7x4 wall**. Wider displays fit four columns (eight cards at the same height), and a standard computer uses two columns. Long titles wrap within each card. Previous, Next, Refresh, Settings and Quit are compact buttons, two character rows tall and at most eleven columns wide. Page buttons are disabled when there is no previous/next page; spaces between cards and empty cells do not start playback. The layout adapts to smaller screens and monitor resizing.
 
 Use arrow keys to move through the grid, **Enter** to play once, or **L** to loop the selected video. Page Up/Page Down or the mouse wheel changes pages, R refreshes, S opens Settings, and Q quits. Touch during playback or press Backspace to stop either mode and return to the menu. Touch-to-stop can be disabled in Settings; Backspace always works. Once-only playback returns automatically when finished. The chosen menu scale and its palette are restored after playback.
+
+Tap **LOOP ALL (N)** in the header, or press **P**, to repeat the included library. Every card has an **IN / OUT** button in its top-right corner; tap it or press **X** for the selected card to change inclusion. These choices save immediately by video URL and survive reboots, title changes and player updates. **OUT** only excludes that video from the library loop: its individual PLAY and LOOP buttons still work. With every video OUT, LOOP ALL is disabled.
+
+The library plays included videos alphabetically by default, or in a fresh shuffled order each pass when **Settings > Playback > Playlist Order** is set to Shuffle. It finishes each recording's audio before advancing, then repeats the queue. The catalogue refreshes after each complete pass: new URLs default to IN, removed videos disappear, and a failed refresh keeps the previous list. Unavailable recordings are skipped; if none can play, the player returns to the menu. Downloads can introduce a pause between recordings. Backspace stops throughout playback, downloads and catalogue refresh; the loading screen's **BACK TO LIBRARY** button works even with touch-to-stop disabled.
+
+![Library loop with a recording excluded](previews/menu-excluded.png)
+
+[Library-loop loading screen](previews/playlist-loading.png). `playlist-verification.json` records eleven scenario groups using the installed ROM scheduler and decoder with simulated hardware and HTTP: badge hit targets, saved exclusions, queue order, full audio across clips, catalogue changes, error recovery, stopping, startup, settings, layout bounds and cleanup. These checks are simulations; the new playlist mode still needs an in-world check.
 
 Loops restart both picture and audio from the beginning with fresh decoder state. Each repeat downloads the recording again, so there can be a loading pause between passes. Touch/Backspace also stops while reloading or draining the last audio buffer. A failed download or invalid recording ends the loop and shows the error in the menu.
 
@@ -35,7 +43,7 @@ This preview renders the actual Lua menu's character cells with the installed CC
 
 The menu lists the `.32vid` objects under `videos/` in the dedicated `craftoria-video-player` R2 bucket. A Cloudflare Worker builds the catalogue dynamically, follows R2 pagination, and streams recordings from the bucket. Upload or delete a converted recording in that prefix, then click Refresh to update the menu. Each card includes the file size. See [R2 deployment and upload instructions](r2/README.md).
 
-HTTP access must allow `craftoria-video-player.raftoria.workers.dev`. The list loads on launch and on explicit refresh, with optional automatic refresh while in the library; playback uses the current session's list. A failed refresh keeps the previous list and displays the error. Video files are downloaded over HTTP and are not saved to the computer disk. The player retains its GitHub source adapter for migration and continues to accept direct file/URL arguments.
+HTTP access must allow `craftoria-video-player.raftoria.workers.dev`. The list loads on launch and on explicit refresh, with optional automatic refresh while in the library. Library looping refreshes between full passes; individual playback uses the current session's list. A failed refresh keeps the previous list and displays the error. Video files are downloaded over HTTP and are not saved to the computer disk. The player retains its GitHub source adapter for migration and continues to accept direct file/URL arguments.
 
 ## Settings
 
@@ -43,12 +51,14 @@ Tap **SETTINGS** beside Refresh, or press **S**. Four tabs provide:
 
 - **Audio:** volume from 0 to 3 in 0.25 steps, mute, automatic first-speaker output, one named speaker, or all connected speakers. Rescan updates the device list; Test plays a short tone using the draft choices. Each audio output has its own decoder and buffer waits so a busy or disconnected output does not block the others. Distributed speakers need wired modems and Networking Cable connected to the computer; volume alone does not create unlimited range.
 - **Display:** automatic or named Advanced Monitor, automatic or 0.5/1.0/1.5 menu text scale, and automatic or 2/3/4 grid columns. The picker offers fitting choices and the applied layout falls back safely if the screen changes. Playback remains at 0.5 to match the recording resolution.
-- **Playback:** enable/disable touch-to-stop and choose Show Library or Loop Last Video on launch. The last video is remembered by URL, so new catalogue entries cannot change its identity. A deleted or unavailable video returns to the menu.
+- **Playback:** enable/disable touch-to-stop; choose Show Library, Loop Last Video or Loop Library on launch; and select Alphabetical or Shuffle playlist order. Loop Library respects saved IN/OUT choices. The last video is remembered by URL, so new catalogue entries cannot change its identity. A deleted or unavailable last video returns to the menu.
 - **Library:** manual refresh or automatic refresh every 5, 15 or 60 minutes, and an advanced catalogue URL editor on the computer keyboard. A new source must return a valid catalogue before it can be saved. The displayed 64 MiB download limit remains a server setting; conversion quality remains in the uploader.
 
 Touch a choice to cycle it. On the keyboard, Tab changes sections, Up/Down selects a row, Left/Right adjusts it, and Enter activates it. **S saves**, while Esc, Backspace or Q cancels. Tiny screens paginate rows with the header arrows or Page Up/Page Down.
 
 **Save & Back** applies preferences and writes them to CraftOS settings so they survive reboot and player updates. **Cancel** discards draft changes. **Defaults** stages the original preferences and requires Save to apply. Mute suppresses audio while preserving the volume preference. Changing a monitor or menu scale redraws the library; changing volume affects the next playback. Automatic refresh pauses during playback and Settings and is rearmed on return.
+
+IN/OUT choices belong to the main menu and save immediately; Settings Cancel and Defaults do not change them. Defaults restores alphabetical order and Show Library startup when saved.
 
 ![Audio settings on a 7x4 monitor wall](previews/settings-audio.png)
 
@@ -58,10 +68,10 @@ The player prepares the compressed recording in RAM before starting playback and
 
 ## Play Wii Shop Bling
 
-Use the updated `video-settings.lua`; monitor discovery and scale setup are automatic:
+Use the updated `video-library.lua`; monitor discovery and scale setup are automatic:
 
 ```text
-video-settings.lua https://craftoria-video-player.raftoria.workers.dev/videos/wii-shop-bling.32vid
+video-library.lua https://craftoria-video-player.raftoria.workers.dev/videos/wii-shop-bling.32vid
 ```
 
 Hold Ctrl+T in the computer GUI to stop the previous recording before entering the new command. The new recording starts at the beginning; the YouTube radio playlist is not included.
@@ -69,7 +79,7 @@ Hold Ctrl+T in the computer GUI to stop the previous recording before entering t
 For a new computer, download the player first:
 
 ```text
-wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-settings.lua
+wget https://raw.githubusercontent.com/Mavial/craftoria-video-player/main/video.lua video-library.lua
 ```
 
 The ten-second test clip has been removed from R2 and GitHub; click Refresh in the menu to update the list.
