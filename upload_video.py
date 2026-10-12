@@ -17,6 +17,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from video_titles import MODEL, generate_title, title_disposition, validate_title
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_BASE = 'https://craftoria-video-player.raftoria.workers.dev'
@@ -165,7 +166,8 @@ def verify_download(url, expected):
 def parser():
     result = ArgumentParser(description=__doc__)
     result.add_argument('source', nargs='?', help='YouTube URL or local video file')
-    result.add_argument('--name', help='Menu filename, using letters, numbers and hyphens')
+    result.add_argument('--name', help='Storage filename, using letters, numbers and hyphens; separate from the display title')
+    result.add_argument('--title', help='Explicit display title (up to 40 characters); skips GPT-6 Luna naming')
     result.add_argument('--start', type=float, default=0, help='Start time in seconds')
     result.add_argument('--duration', type=float, help='Convert only this many seconds')
     result.add_argument('--max-fps', type=int, default=30, choices=range(1, 31),
@@ -221,6 +223,14 @@ def main(argv=None):
         info = json.loads(run(options + ['--dump-single-json', '--skip-download', '--', args.source], work, capture=True))
         if info.get('is_live') or info.get('live_status') == 'is_live':
             raise ValueError('Use a completed video rather than a live stream.')
+    print('Naming for the monitor' + ('...' if args.title else ' with GPT-6 Luna...'), flush=True)
+    display_title = validate_title(args.title) if args.title is not None else generate_title(info, settings, work)
+    print('Display title: ' + display_title, flush=True)
+    name = args.name or (slug(info['title']) + '-' + slug(str(info['id'])))[:101].rstrip('-')
+    public_url = base + '/videos/' + name + '.32vid'
+    if not args.no_upload and public_exists(public_url) and not args.overwrite:
+        raise ValueError(f'{name} already exists. Choose another --name, or explicitly use --overwrite.')
+    if not local_source:
         print('Downloading: ' + info['title'], flush=True)
         run(options + ['-f', prefer_hls(info), '--merge-output-format', 'mp4',
             '-o', str(work / 'source.%(ext)s'), '--', args.source], work)
@@ -228,10 +238,6 @@ def main(argv=None):
         if len(sources) != 1:
             raise ValueError('Could not identify the downloaded video file')
         source = sources[0]
-    name = args.name or (slug(info['title']) + '-' + slug(str(info['id'])))[:101].rstrip('-')
-    public_url = base + '/videos/' + name + '.32vid'
-    if not args.no_upload and public_exists(public_url) and not args.overwrite:
-        raise ValueError(f'{name} already exists. Choose another --name, or explicitly use --overwrite.')
     probe = json.loads(run([ffprobe, '-v', 'error', '-show_format', '-show_streams', '-of', 'json', str(source)], work, capture=True))
     if not any(s['codec_type'] == 'video' for s in probe['streams']):
         raise ValueError('Source has no video stream')
@@ -270,7 +276,9 @@ def main(argv=None):
             print(str(error) + '; trying a lower frame rate.', flush=True)
     else:
         raise ValueError('Recording still exceeds the limit at 1 FPS. Choose a shorter --duration.')
-    manifest = dict(result, title=info['title'], source=args.source, file=output.name, url=public_url, uploaded=False)
+    manifest = dict(result, title=display_title, original_title=info['title'], source_id=info['id'],
+                    naming_model=MODEL if args.title is None else 'manual',
+                    source=args.source, file=output.name, url=public_url, uploaded=False)
     (work / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
     print(f'Validated: {result["bytes"]:,} bytes, {result["fps"]} FPS, complete {seconds}s audio.', flush=True)
     if args.no_upload:
@@ -278,7 +286,8 @@ def main(argv=None):
         return manifest
     print('Uploading to R2...', flush=True)
     run(upload_command + ['r2', 'object', 'put', args.bucket + '/videos/' + output.name,
-        '--file', str(output), '--content-type', 'application/octet-stream', '--remote'], work)
+        '--file', str(output), '--content-type', 'application/octet-stream',
+        '--content-disposition', title_disposition(display_title), '--remote'], work)
     print('Verifying public download...', flush=True)
     verify_download(public_url, result)
     manifest['uploaded'] = True

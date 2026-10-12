@@ -31,7 +31,7 @@ Loops restart both picture and audio from the beginning with fresh decoder state
 
 ![Touch menu on a 7x4 monitor wall](previews/menu-7x4.png)
 
-This preview renders the actual Lua menu's character cells with the installed CC:Tweaked font and an example three-recording catalogue; it is not an in-world screenshot. [Six-card](previews/menu-six-cards.png), [eight-card](previews/menu-eight-cards.png) and [compact computer](previews/menu-computer.png) previews are also available. The full-page previews add placeholder entries only for illustration; these examples are not uploaded to R2.
+This preview renders the actual Lua menu's character cells with the installed CC:Tweaked font and a five-recording catalogue snapshot with friendly titles; it is not an in-world screenshot. [Six-card](previews/menu-six-cards.png), [eight-card](previews/menu-eight-cards.png) and [compact computer](previews/menu-computer.png) previews are also available. The full-page previews add placeholder entries only for illustration; these examples are not uploaded to R2.
 
 The menu lists the `.32vid` objects under `videos/` in the dedicated `craftoria-video-player` R2 bucket. A Cloudflare Worker builds the catalogue dynamically, follows R2 pagination, and streams recordings from the bucket. Upload or delete a converted recording in that prefix, then click Refresh to update the menu. Each card includes the file size. See [R2 deployment and upload instructions](r2/README.md).
 
@@ -76,7 +76,7 @@ The ten-second test clip has been removed from R2 and GitHub; click Refresh in t
 
 ## Available recordings
 
-To add your own videos, use the [automatic uploader](UPLOADING.md). On the configured PC, run `python .\video-player\upload_video.py "YOUTUBE_URL"` from the Craftoria workspace, then click Refresh on the monitor.
+To add your own videos, use the [automatic uploader](UPLOADING.md). On the configured PC, run `python .\video-player\upload_video.py "YOUTUBE_URL"` from the Craftoria workspace, then click Refresh on the monitor. GPT-6 Luna supplies short display titles through your signed-in Codex CLI, with unique storage filenames kept separately. Use `--title "My Video"` to choose your own title. The Worker reads friendly title metadata, so existing players show cleaned titles after Refresh.
 
 Click Refresh in the menu to see the current library. These hosted recordings were upgraded from 7 FPS after the server's HTTP download limit was increased to 64 MiB:
 

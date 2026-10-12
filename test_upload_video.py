@@ -5,6 +5,7 @@ from pathlib import Path
 import struct
 import tempfile
 import unittest
+import json
 from unittest.mock import patch
 import urllib.error
 
@@ -16,6 +17,38 @@ TEST_TMP.mkdir(parents=True, exist_ok=True)
 
 
 class UploadTests(unittest.TestCase):
+    def test_uploader_generates_display_metadata_preserves_storage_name_and_allows_manual_title(self):
+        for explicit in (False, True):
+            with tempfile.TemporaryDirectory(dir=TEST_TMP) as directory:
+                root = Path(directory); source = root / 'source.mp4'; source.write_bytes(b'original')
+                work = root / 'work'
+                uploads = []
+                def command_run(command, current_work, **kwargs):
+                    if command[0] == 'ffprobe':
+                        return json.dumps({'format': {'duration': '1'}, 'streams': [
+                            {'codec_type': 'video', 'avg_frame_rate': '30/1'}, {'codec_type': 'audio'}]})
+                    if command[0] == 'ffmpeg':
+                        Path(command[-1]).write_bytes(b'\0' * 6000 if command[-1].endswith('.dfpwm') else b'mp4')
+                    elif command[0] == 'sanjuuni':
+                        packet = struct.pack('<IB', 2, 0) + b'v0'
+                        Path(command[-1]).write_bytes(struct.pack('<4sHHBBHIIB', b'32VD', 143, 52, 1, 1, 21, len(packet), 1, 12) + packet)
+                    elif command[0] == 'node': uploads.append(command)
+                args = [str(source), '--name', 'unique-name', '--max-fps', '1', '--work-dir', str(work)]
+                if explicit: args += ['--title', "My Natural Title"]
+                with patch.object(upload, 'config', return_value={}), patch.object(upload, 'tool', side_effect=lambda name, _: name), \
+                     patch.object(upload, 'wrangler_command', return_value=['node', 'wrangler']), \
+                     patch.object(upload, 'public_exists', return_value=False), patch.object(upload, 'run', side_effect=command_run), \
+                     patch.object(upload, 'verify_download'), patch.object(upload, 'generate_title', return_value='Natural AI Title') as naming:
+                    result = upload.main(args)
+                expected_title = 'My Natural Title' if explicit else 'Natural AI Title'
+                self.assertEqual(result['title'], expected_title)
+                self.assertEqual(result['original_title'], 'source')
+                self.assertEqual(result['file'], 'unique-name.32vid')
+                self.assertTrue(result['uploaded'])
+                self.assertEqual(naming.call_count, 0 if explicit else 1)
+                self.assertEqual(uploads[0][uploads[0].index('--content-disposition') + 1], upload.title_disposition(expected_title))
+                self.assertEqual(json.loads((work / 'manifest.json').read_text())['title'], expected_title)
+
     def test_frame_rates_respect_source_and_fall_back_within_requested_cap(self):
         self.assertEqual(upload.frame_rates(30, '25/1'), [25, 24, 20, 15, 10, 7, 5, 3, 2, 1])
         self.assertEqual(upload.frame_rates(30, '30000/1001')[0], 30)

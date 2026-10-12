@@ -1,5 +1,24 @@
 const PREFIX = "videos/";
 
+function displayTitle(object) {
+  if (typeof object.customMetadata?.title === "string" && object.customMetadata.title.trim()) {
+    return object.customMetadata.title.trim();
+  }
+  const disposition = object.httpMetadata?.contentDisposition;
+  if (typeof disposition === "string") {
+    const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    const quoted = disposition.match(/filename="((?:[^"\\]|\\.)*)"/i);
+    try {
+      const filename = encoded ? decodeURIComponent(encoded[1].trim()) : quoted?.[1].replace(/\\(.)/g, "$1");
+      if (filename?.toLowerCase().endsWith(".32vid")) {
+        const title = filename.slice(0, -6).trim();
+        if (title && !/[\x00-\x1f\x7f]/.test(title)) return title;
+      }
+    } catch { /* Invalid metadata falls back to the legacy filename title. */ }
+  }
+  return object.key.slice(PREFIX.length, -6).replace(/[-_]/g, " ").replace(/\b[a-z]/g, c => c.toUpperCase());
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -8,9 +27,9 @@ export default {
     }
     if (url.pathname === "/videos.json") {
       const cursor = url.searchParams.get("cursor") || undefined;
-      const page = await env.VIDEOS.list({ prefix: PREFIX, limit: 100, cursor, include: ["customMetadata"] });
+      const page = await env.VIDEOS.list({ prefix: PREFIX, limit: 100, cursor, include: ["customMetadata", "httpMetadata"] });
       const videos = page.objects.filter(object => object.key.toLowerCase().endsWith(".32vid")).map(object => ({
-        title: object.customMetadata?.title || object.key.slice(PREFIX.length, -6).replace(/[-_]/g, " ").replace(/\b[a-z]/g, c => c.toUpperCase()),
+        title: displayTitle(object),
         url: new URL("/" + object.key.split("/").map(encodeURIComponent).join("/"), url.origin).href,
         size: object.size,
         release: "R2",

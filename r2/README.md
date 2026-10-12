@@ -16,7 +16,9 @@ For a YouTube URL or local MP4, the [automatic uploader](../UPLOADING.md) handle
 npx wrangler r2 object put "craftoria-video-player/videos/example.32vid" --file "C:\path\example.32vid" --content-type application/octet-stream --remote
 ```
 
-Keep recordings within the Minecraft server's HTTP download limit. The configured server now allows 64 MiB per request (`max_download = 67108864`, reported by the user); the automatic uploader defaults to one byte below this. The player and Worker impose no additional 16 MiB cap. Filenames supply menu titles; optional R2 custom metadata `title` overrides the generated title.
+Keep recordings within the Minecraft server's HTTP download limit. The configured server now allows 64 MiB per request (`max_download = 67108864`, reported by the user); the automatic uploader defaults to one byte below this. The player and Worker impose no additional 16 MiB cap.
+
+The automatic uploader generates a friendly GPT-6 Luna title and stores it as the filename in R2's Content-Disposition HTTP metadata. The catalogue includes HTTP and custom metadata in the same paginated R2 list operation. Display-title precedence is: nonempty custom metadata `title`, the friendly `.32vid` filename in Content-Disposition, then the legacy object-key title. Both UTF-8 encoded and quoted filenames are supported; malformed metadata falls back safely. The recording's actual R2 key and download URL are independent of the display title. This uses Wrangler's supported `--content-disposition` option and needs no additional bucket, secret, writable public route, or Minecraft player update.
 
 Deploy changes from this directory with `npx wrangler deploy`. Run the Worker checks with `node --test worker.test.mjs`.
 

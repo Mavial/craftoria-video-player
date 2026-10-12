@@ -1,0 +1,65 @@
+{
+  "model": "gpt-6-luna",
+  "backend": "Codex CLI with existing ChatGPT login",
+  "max_title_characters": 40,
+  "live_model_generation": true,
+  "catalogue_titles_verified": true,
+  "worker_version": "c203b8a3-dee6-426f-affa-9869412c2e6f",
+  "checks": {
+    "uploader_tests": 7,
+    "naming_tests": 4,
+    "worker_tests": 4
+  },
+  "videos": [
+    {
+      "url": "https://craftoria-video-player.raftoria.workers.dev/videos/crazy-frog-axel-f-official-video-k85mrpqvmbe.32vid",
+      "before": "Crazy Frog Axel F Official Video K85mrpqvmbe",
+      "title": "Crazy Frog - Axel F",
+      "bytes": 43288340,
+      "sha256": "0a1cc2e8faec5b7fce37a41a5943a3ef7c72fb57a615d0ae9dab90ac07f8140d",
+      "changed": true,
+      "original_bytes_verified": true,
+      "download_sha256_verified_after_update": true
+    },
+    {
+      "url": "https://craftoria-video-player.raftoria.workers.dev/videos/michelle-mouton-rally-house-i-don-t-feel-at-all-edit-2iodqaa9-4q.32vid",
+      "before": "Michelle Mouton Rally House I Don T Feel At All Edit 2iodqaa9 4q",
+      "title": "Michelle Mouton - I Don't Feel At All",
+      "bytes": 17508382,
+      "sha256": "d47e3e9a025fe14f5126fe711efff671f20d940b4b31df0105f1f92e409a1708",
+      "changed": true,
+      "original_bytes_verified": true,
+      "download_sha256_verified_after_update": true
+    },
+    {
+      "url": "https://craftoria-video-player.raftoria.workers.dev/videos/mii-channel-plaza-theme-hq-eqtzpo7xskk.32vid",
+      "before": "Mii Channel Plaza Theme Hq Eqtzpo7xskk",
+      "title": "Mii Channel - Plaza Theme",
+      "bytes": 18905963,
+      "sha256": "f2232f534ced605a1ddec44ad090b850d408bc18cd817a29f6343443c904a25a",
+      "changed": true,
+      "original_bytes_verified": true,
+      "download_sha256_verified_after_update": true
+    },
+    {
+      "url": "https://craftoria-video-player.raftoria.workers.dev/videos/skaven-techno-lasers.32vid",
+      "before": "Skaven Techno Lasers",
+      "title": "Skaven Techno Lasers",
+      "bytes": 46009476,
+      "sha256": "b9bc79bc2202d02cae596ec469cadd74618dba71d57f1489b7cd460c602c1842",
+      "changed": false,
+      "original_bytes_verified": true,
+      "download_sha256_verified_after_update": false
+    },
+    {
+      "url": "https://craftoria-video-player.raftoria.workers.dev/videos/wii-shop-bling.32vid",
+      "before": "Wii Shop Bling",
+      "title": "Wii Shop Bling",
+      "bytes": 60284886,
+      "sha256": "451a0b916cebb42f3d44e71e5d2786bbad06c3043b2043faa5f62f78e7a26fa4",
+      "changed": false,
+      "original_bytes_verified": true,
+      "download_sha256_verified_after_update": false
+    }
+  ]
+}
