@@ -1,4 +1,12 @@
 const PREFIX = "videos/";
+const THUMBNAIL_BYTES = 256 * 1024;
+
+function thumbnailURL(object, origin) {
+  const url = new URL("/" + object.key.split("/").map(encodeURIComponent).join("/"), origin);
+  url.searchParams.set("thumbnail", "1");
+  url.searchParams.set("v", object.etag || object.httpEtag);
+  return url.href;
+}
 
 function displayTitle(object) {
   if (typeof object.customMetadata?.title === "string" && object.customMetadata.title.trim()) {
@@ -33,6 +41,7 @@ export default {
         url: new URL("/" + object.key.split("/").map(encodeURIComponent).join("/"), url.origin).href,
         size: object.size,
         release: "R2",
+        thumbnail: thumbnailURL(object, url.origin),
       }));
       const headers = new Headers({ "Content-Type": "application/json", "Cache-Control": "no-store" });
       if (page.truncated) {
@@ -49,8 +58,23 @@ export default {
         || key.split("/").some(part => part === "." || part === "..") || /[\x00-\x1f\x7f]/.test(key)) {
       return new Response("Not found", { status: 404 });
     }
-    const object = request.method === "HEAD" ? await env.VIDEOS.head(key) : await env.VIDEOS.get(key);
+    // A distinct URL keeps background thumbnail events separate from playback.
+    // Existing recordings need no sidecar objects or re-upload.
+    const thumbnail = url.searchParams.get("thumbnail") === "1";
+    const object = request.method === "HEAD" ? await env.VIDEOS.head(key)
+      : thumbnail ? await env.VIDEOS.get(key, { range: { offset: 0, length: THUMBNAIL_BYTES } })
+      : await env.VIDEOS.get(key);
     if (!object) return new Response("Not found", { status: 404 });
+    if (thumbnail) {
+      const length = Math.min(object.size, THUMBNAIL_BYTES);
+      if (!length) return new Response("No thumbnail data", { status: 422 });
+      return new Response(request.method === "HEAD" ? null : object.body, {
+        status: 206,
+        headers: { "Content-Type": "application/octet-stream", "Content-Length": String(length),
+          "Content-Range": `bytes 0-${length - 1}/${object.size}`, "Accept-Ranges": "bytes",
+          "ETag": object.httpEtag, "Cache-Control": "no-store" },
+      });
+    }
     return new Response(request.method === "HEAD" ? null : object.body, {
       headers: { "Content-Type": "application/octet-stream", "Content-Length": String(object.size),
         "ETag": object.httpEtag, "Cache-Control": "no-store" },

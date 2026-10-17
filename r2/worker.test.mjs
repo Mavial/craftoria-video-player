@@ -16,7 +16,8 @@ test("catalogue lists videos, excludes other objects, and follows R2 cursors", a
   const response=await worker.fetch(request("/videos.json"),env);
   assert.equal(response.headers.get("cache-control"),"no-store");
   const videos=await response.json();
-  assert.deepEqual(videos,[{title:"Movie",url:origin+"/videos/movie.32vid",size:4,release:"R2"}]);
+  assert.deepEqual(videos,[{title:"Movie",url:origin+"/videos/movie.32vid",size:4,release:"R2",
+    thumbnail:origin+"/videos/movie.32vid?thumbnail=1&v=%22abcd%22"}]);
   const next=response.headers.get("link").match(/<([^>]+)>/)[1];
   const second=await worker.fetch(new Request(next),env);
   assert.equal((await second.json())[0].url,origin+"/videos/new%20movie.32vid");
@@ -62,4 +63,37 @@ test("only video reads are exposed; writes and other bucket keys are unavailable
   }
   const missing=await worker.fetch(request("/videos/missing.32vid"),{VIDEOS:{get:async()=>null}});
   assert.equal(missing.status,404);
+});
+
+test("thumbnail reads use a bounded R2 prefix, versioned URLs, and correct byte metadata", async () => {
+  const bytes = new Uint8Array(300000).map((_, i) => i % 251);
+  const calls = [];
+  const env = { VIDEOS: {
+    get: async (key, options) => {
+      calls.push({ key, options });
+      return { ...object(key), size: bytes.length, body: bytes.slice(0, options.range.length) };
+    },
+    head: async key => ({ ...object(key), size: bytes.length }),
+    list: async () => ({ objects: [{ ...object("videos/movie.32vid"), etag: "new-version" }], truncated: false }),
+  } };
+  const response = await worker.fetch(request("/videos/movie.32vid?thumbnail=1&v=old-version"), env);
+  assert.equal(response.status, 206);
+  assert.equal(response.headers.get("content-range"), "bytes 0-262143/300000");
+  assert.equal(response.headers.get("content-length"), "262144");
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), bytes.slice(0, 262144));
+  assert.deepEqual(calls, [{key:"videos/movie.32vid",options:{range:{offset:0,length:262144}}}]);
+  const head = await worker.fetch(request("/videos/movie.32vid?thumbnail=1", "HEAD"), env);
+  assert.equal(head.status, 206);
+  assert.equal(await head.text(), "");
+  assert.equal(head.headers.get("content-length"), "262144");
+  const catalogue = await (await worker.fetch(request("/videos.json"), env)).json();
+  assert.equal(new URL(catalogue[0].thumbnail).searchParams.get("v"), "new-version");
+});
+
+test("small thumbnail sources clamp the range and missing or invalid routes remain unavailable", async () => {
+  const response = await worker.fetch(request("/videos/tiny.32vid?thumbnail=1"), { VIDEOS: { get:async key=>object(key) } });
+  assert.equal(response.headers.get("content-range"), "bytes 0-3/4");
+  assert.equal(await response.text(), "32VD");
+  assert.equal((await worker.fetch(request("/videos/absent.32vid?thumbnail=1"), {VIDEOS:{get:async()=>null}})).status, 404);
+  assert.equal((await worker.fetch(request("/secret.txt?thumbnail=1"), {VIDEOS:{get:async()=>{throw Error('Forbidden read')}}})).status, 404);
 });

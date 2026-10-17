@@ -1,0 +1,18 @@
+{
+  "passed": [
+    "Constant and compressed thumbnail RGB samples agree with the independently verified Rust frame decoder",
+    "A bounded multi-frame prefix advances past a flat opening without blocking menu input",
+    "Only visible cards load serially; page revisit uses cache; image and IN/OUT hit targets work",
+    "HTTP failures and malformed recordings retain usable cards, close handles and retry on Refresh",
+    "Unbounded/full-object responses and oversized prefixes are rejected and closed",
+    "Timeouts advance the queue; late replies close safely without overwriting newer work",
+    "A thumbnail reply during playback closes correctly; Backspace still stops and restores the menu",
+    "A thumbnail reply during synchronous catalogue refresh is collected and closed instead of lost",
+    "Replacing a recording invalidates its versioned thumbnail while title-only refreshes reuse it",
+    "Compact, six-card and eight-card layouts stay within bounds; the saved display toggle controls loading",
+    "The RAM-only thumbnail cache evicts old pages after 32 images",
+    "Large low-scale walls paginate at the cache limit instead of repeatedly fetching evicted visible images"
+  ],
+  "sample_decode_ms_on_this_pc": 0.938,
+  "note": "Simulation with installed CC ROM; PC timings do not measure Minecraft server performance."
+}
