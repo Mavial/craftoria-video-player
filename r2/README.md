@@ -8,8 +8,6 @@ Catalogue: `https://craftoria-video-player.raftoria.workers.dev/videos.json`.
 
 The bucket is bound to the Worker as `VIDEOS`. The Worker exposes only GET/HEAD access to `.32vid` files under `videos/` and generates the catalogue from R2's current contents. It follows R2 cursor pagination through the catalogue's Link response header. No browser or Minecraft client credentials are needed; video downloads through the Worker are public.
 
-Catalogue entries also advertise an optional `thumbnail` URL. Its `thumbnail=1` query requests only the first 256 KiB of the existing recording through R2's range API; it returns HTTP 206, Content-Range, the actual Content-Length and the recording's ETag. HEAD returns the same metadata without bytes. The URL's version is derived from the ETag. This is a bounded `.32vid` prefix for the in-game decoder, not a PNG. It needs no additional objects or writable routes, and normal full-video URLs remain unchanged. See [in-game thumbnails](../THUMBNAILS.md).
-
 Upload a new converted recording under `videos/`, then click Refresh on the monitor:
 
 For a YouTube URL or local MP4, the [automatic uploader](../UPLOADING.md) handles downloading, conversion, upload and checksum verification for you. The command below is for files already converted to `.32vid`.

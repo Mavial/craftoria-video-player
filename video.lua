@@ -13,10 +13,10 @@ local originalTerminal = term.current()
 local activeMonitor, ownsMonitor = nil, false
 local restoreScreen
 local outputs, startupNotice = {}, nil
-local configDefaults = {volume = 1, muted = false, speakers = "auto", speaker = "", thumbnails = true,
+local configDefaults = {volume = 1, muted = false, speakers = "auto", speaker = "",
     monitor = "", scale = "auto", columns = 0, touchStop = true, startup = "menu", refresh = 0,
     r2_url = DEFAULT_R2_URL, playOrder = "alphabetical"}
-local configKeys = {volume = "video.volume", muted = "video.muted", speakers = "video.speakers", thumbnails = "video.thumbnails",
+local configKeys = {volume = "video.volume", muted = "video.muted", speakers = "video.speakers",
     speaker = "video.speaker", monitor = "video.monitor", scale = "video.menu_scale",
     columns = "video.columns", touchStop = "video.touch_stop", startup = "video.startup",
     refresh = "video.refresh_minutes", r2_url = "video.r2_url", playOrder = "video.playlist_order"}
@@ -144,13 +144,10 @@ local function setupMonitor(configured, force)
     end
 end
 
-local handleThumbnailEvent
 local function inputEvent()
     while true do
         local event = table.pack(os.pullEvent())
-        if handleThumbnailEvent and handleThumbnailEvent(event) then
-            return "video_thumbnail"
-        elseif ownsMonitor and event[1] == "monitor_touch" then
+        if ownsMonitor and event[1] == "monitor_touch" then
             if event[2] == activeMonitor then return "mouse_click", 1, event[3], event[4] end
         elseif ownsMonitor and event[1]:match("^mouse_") then
             -- Computer-GUI coordinates do not refer to the selected monitor.
@@ -175,299 +172,11 @@ local function closeInput()
     end
 end
 
--- Every card shares the menu palette: changing it for one image recolours the wall.
-local menuPalette = {
-    {colors.black, 0x14151D}, {colors.gray, 0x343642}, {colors.blue, 0x29364A},
-    {colors.lightGray, 0xABABBB}, {colors.white, 0xEEEEF3}, {colors.cyan, 0x5DD6DF},
-    {colors.green, 0x54B89B}, {colors.orange, 0xF1B562}, {colors.red, 0xD26A75},
-}
-local THUMBNAIL_BYTES, THUMBNAIL_CACHE = 262144, 32
-local thumbnailCache, thumbnailRequests = {}, {}
-local thumbnailPending, thumbnailRaw, thumbnailDecodeTimer
-local thumbnailClock = 0
-local function thumbnailKey(video)
-    return video.thumbnail and (video.thumbnail .. "|" .. tostring(video.size))
-end
-local function cacheThumbnail(key, image)
-    thumbnailClock = thumbnailClock + 1
-    thumbnailCache[key] = {image = image, used = thumbnailClock}
-    local count, oldest, oldestUse = 0, nil, math.huge
-    for name, entry in pairs(thumbnailCache) do
-        count = count + 1
-        if entry.used < oldestUse then oldest, oldestUse = name, entry.used end
-    end
-    if count > THUMBNAIL_CACHE then thumbnailCache[oldest] = nil end
-end
-
--- Bounded ANS decoding for thumbnails. Playback keeps its original decoder.
-local function thumbnailFrame(data, first, last, columns, rows)
-    local position, bits, partial = first, 0, 0
-    local function byte()
-        assert(position <= last, "Truncated thumbnail frame")
-        local value = data:byte(position); position = position + 1
-        return value
-    end
-    local function readbits(n)
-        while bits < n do partial, bits = bit32_lshift(partial, 8) + byte(), bits + 8 end
-        bits = bits - n
-        return bit32_band(bit32_rshift(partial, bits), 2^n - 1)
-    end
-    local function ans(color)
-        bits, partial = 0, 0
-        local r, counts = byte(), {}
-        assert(r == 0 or (r >= 3 and r <= 14), "Unsupported thumbnail dictionary")
-        local count = color and 24 or 32
-        local total = 0
-        for i = 0, count - 1, 2 do
-            local packed = byte()
-            for j = 0, 1 do
-                local n = j == 0 and bit32_rshift(packed, 4) or bit32_band(packed, 15)
-                counts[i+j] = n == 0 and 0 or 2^(n-1)
-                total = total + counts[i+j]
-            end
-        end
-        if r == 0 then
-            local value = byte()
-            assert(value < (color and 16 or 32), "Invalid thumbnail symbol")
-            return function(n) local out = {}; for i = 1, n do out[i] = value end; return out end
-        end
-        local length = 2^r
-        assert(total == length, "Invalid thumbnail dictionary")
-        local spread, tables, x = {}, {}, 0
-        for s = 0, count - 1 do
-            for _ = 1, counts[s] do
-                while spread[x] do x = (x + 1) % length end
-                spread[x] = s; x = (x + length * 0.625 + 3) % length
-            end
-        end
-        for i = 0, length - 1 do
-            local s = spread[i]
-            local n = r - log2(counts[s])
-            tables[i] = {s = s, n = n, base = bit32_lshift(counts[s], n) - length}
-            counts[s] = counts[s] + 1
-        end
-        local state = readbits(r)
-        return function(n)
-            local out, previous, i = {}, 0, 1
-            while i <= n do
-                local entry = assert(tables[state], "Invalid thumbnail state")
-                if color and entry.s >= 16 then
-                    local run = 2^(entry.s - 15)
-                    assert(i + run - 1 <= n, "Invalid thumbnail colour run")
-                    for j = i, i + run - 1 do out[j] = previous end
-                    i = i + run
-                else out[i], previous, i = entry.s, entry.s, i + 1 end
-                state = entry.base + readbits(entry.n)
-            end
-            return out
-        end
-    end
-    local count = columns * rows
-    local screen = ans(false)(count)
-    local readColors = ans(true)
-    local bg, fg = readColors(count), readColors(count)
-    assert(position + 47 == last, "Invalid thumbnail palette")
-    local palette = {}
-    for i = 0, 15 do palette[i] = {byte(), byte(), byte()} end
-    local width, height = columns * 2, rows * 3
-    local function pixel(x, y)
-        local cell = math.floor(y / 3) * columns + math.floor(x / 2) + 1
-        local bit = y % 3 * 2 + x % 2
-        local color = bit < 5 and bit32_band(screen[cell], 2^bit) ~= 0 and fg[cell] or bg[cell]
-        return assert(palette[color], "Invalid thumbnail colour")
-    end
-    local image = {width = 32, height = math.max(1, math.min(32, math.floor(32 * height / width + 0.5))), pixels = {}}
-    local sum, squares = {0,0,0}, 0
-    for y = 0, image.height - 1 do
-        for x = 0, image.width - 1 do
-            local r, g, b = 0, 0, 0
-            for dy = 1, 2 do for dx = 1, 2 do
-                local p = pixel(math.min(width-1, math.floor((x+(dx-0.5)/2)*width/image.width)),
-                    math.min(height-1, math.floor((y+(dy-0.5)/2)*height/image.height)))
-                r, g, b = r + p[1], g + p[2], b + p[3]
-            end end
-            r, g, b = math.floor(r/4), math.floor(g/4), math.floor(b/4)
-            sum[1], sum[2], sum[3] = sum[1]+r, sum[2]+g, sum[3]+b
-            squares = squares + r*r + g*g + b*b
-            image.pixels[#image.pixels+1] = {r, g, b}
-        end
-    end
-    local count = #image.pixels
-    return image, squares/count - (sum[1]^2+sum[2]^2+sum[3]^2)/(count*count)
-end
-
-handleThumbnailEvent = function(event)
-    local kind, url = event[1], event[2]
-    if kind == "timer" and thumbnailPending and url == thumbnailPending.timer then
-        cacheThumbnail(thumbnailPending.key, false)
-        thumbnailPending = nil
-        return true
-    end
-    local request = (kind == "http_success" or kind == "http_failure") and thumbnailRequests[url]
-    if not request then return false end
-    thumbnailRequests[url] = nil
-    local handle = kind == "http_success" and event[3] or event[4]
-    local ok, bytes = pcall(function()
-        assert(kind == "http_success" and handle, "Thumbnail unavailable")
-        assert(handle.getResponseCode() == 206, "Thumbnail source does not support bounded previews")
-        local parts, size = {}, 0
-        repeat
-            local part = handle.read(math.min(16384, THUMBNAIL_BYTES + 1 - size))
-            if not part or #part == 0 then break end
-            size = size + #part; parts[#parts+1] = part
-        until size > THUMBNAIL_BYTES
-        assert(size <= THUMBNAIL_BYTES, "Thumbnail prefix too large")
-        return table.concat(parts)
-    end)
-    if handle then pcall(handle.close) end
-    if request == thumbnailPending then
-        os.cancelTimer(request.timer)
-        thumbnailPending = nil
-        if ok then thumbnailRaw = {key = request.key, data = bytes}
-        else cacheThumbnail(request.key, false) end
-    end
-    return true
-end
-
-local function advanceThumbnails(videos)
-    local allowed = {}
-    for _, video in ipairs(videos) do local key = thumbnailKey(video); if key then allowed[key] = true end end
-    for key in pairs(thumbnailCache) do if not allowed[key] then thumbnailCache[key] = nil end end
-    if thumbnailPending and os.epoch("utc") >= thumbnailPending.deadline then
-        cacheThumbnail(thumbnailPending.key, false); thumbnailPending = nil
-    end
-    if not thumbnailRaw then return end
-    local job = thumbnailRaw
-    if not allowed[job.key] then thumbnailRaw = nil; return end
-    local ok, done = pcall(function()
-        local data = job.data
-        if not job.columns then
-            assert(#data >= 21 and data:sub(1,4) == "32VD", "Invalid thumbnail header")
-            local w, h, _, streams, flags = ("<HHBBH"):unpack(data, 5)
-            assert(w > 0 and h > 0 and w <= 256 and h <= 128 and w*h <= 32768, "Unsupported thumbnail size")
-            assert(streams == 1 and bit32_band(flags, 3) == 1 and not bit32.btest(flags, 0x20)
-                and data:byte(21) == 12, "Unsupported thumbnail stream")
-            job.columns, job.rows = w, h
-            local frames, position, packets = {}, 22, 0
-            while position + 4 <= #data and #frames < 240 and packets < 2048 do
-                local length, kind = ("<IB"):unpack(data, position)
-                assert(length > 0, "Invalid thumbnail packet")
-                local last = position + 4 + length
-                if last > #data then break end
-                if kind == 0 then frames[#frames+1] = {first = position+5, last = last} end
-                position, packets = last+1, packets+1
-            end
-            job.candidates, job.next = {}, 1
-            -- Sample across the available opening rather than accepting a fade-in.
-            local count = math.min(8, #frames)
-            for i = 1, count do
-                local index = count == 1 and 1 or 1 + math.floor((i-1)*(#frames-1)/(count-1))
-                job.candidates[i] = frames[index]
-            end
-        end
-        local candidate = job.candidates[job.next]
-        if candidate then
-            local image, score = thumbnailFrame(data, candidate.first, candidate.last, job.columns, job.rows)
-            if not job.best or score > job.score then job.best, job.score = image, score end
-            job.next = job.next + 1
-            if job.next <= #job.candidates then return false end
-        end
-        return true
-    end)
-    if not ok or done then
-        cacheThumbnail(job.key, job.best or false); thumbnailRaw = nil
-    else
-        if thumbnailDecodeTimer then os.cancelTimer(thumbnailDecodeTimer) end
-        thumbnailDecodeTimer = os.startTimer(0)
-    end
-end
-
-local function requestThumbnails(videos, first, last)
-    if not config.thumbnails or type(http.request) ~= "function" or thumbnailPending or thumbnailRaw then return end
-    for i = first, last do
-        local video = videos[i]
-        local key = video and thumbnailKey(video)
-        if key and not thumbnailCache[key] and not thumbnailRequests[video.thumbnail] then
-            local request = {key = key, deadline = os.epoch("utc") + 10000, timer = os.startTimer(10)}
-            thumbnailRequests[video.thumbnail], thumbnailPending = request, request
-            local ok, started = pcall(http.request, {url = video.thumbnail, binary = true, timeout = 10,
-                redirect = false, headers = {["User-Agent"] = "Craftoria-Video-Player", Range = "bytes=0-262143"}})
-            if ok and started then return end
-            thumbnailRequests[video.thumbnail], thumbnailPending = nil, nil
-            os.cancelTimer(request.timer); cacheThumbnail(key, false)
-        end
-    end
-end
-
-local function drawThumbnail(image, x, y, width, height)
-    local palette, digits = {}, "0123456789abcdef"
-    for i = 0, 15 do
-        local r, g, b = term.nativePaletteColor(2^i)
-        palette[i] = {r*255, g*255, b*255}
-    end
-    for _, entry in ipairs(menuPalette) do
-        local rgb = entry[2]
-        palette[log2(entry[1])] = {bit32_rshift(rgb,16), bit32_band(bit32_rshift(rgb,8),255), bit32_band(rgb,255)}
-    end
-    local function distance(a, b) return (a[1]-b[1])^2 + (a[2]-b[2])^2 + (a[3]-b[3])^2 end
-    local mapped = {}
-    for i, pixel in ipairs(image.pixels) do
-        local best, score = 0, math.huge
-        for color = 0, 15 do local d = distance(pixel, palette[color]); if d < score then best, score = color, d end end
-        mapped[i] = best
-    end
-    local scale = math.min(width*2/image.width, height*3/image.height)
-    local left, top = (width*2-image.width*scale)/2, (height*3-image.height*scale)/2
-    local function pixel(px, py)
-        px, py = math.floor((px-left)/scale), math.floor((py-top)/scale)
-        if px < 0 or py < 0 or px >= image.width or py >= image.height then return 15 end
-        return mapped[py*image.width+px+1]
-    end
-    for row = 0, height-1 do
-        local chars, foregrounds, backgrounds = {}, {}, {}
-        for column = 0, width-1 do
-            local six, counts = {}, {}
-            for bit = 0, 5 do
-                local color = pixel(column*2 + bit%2 + 0.5, row*3 + math.floor(bit/2) + 0.5)
-                six[bit+1] = color; counts[color] = (counts[color] or 0) + 1
-            end
-            local a, b = six[6], six[6]
-            for color = 0, 15 do if (counts[color] or 0) > (counts[a] or 0) then a = color end end
-            b = a
-            for color = 0, 15 do
-                if color ~= a and (b == a or (counts[color] or 0) > (counts[b] or 0)) then b = color end
-            end
-            local bg, fg = a, b
-            if distance(palette[six[6]], palette[b]) < distance(palette[six[6]], palette[a]) then bg, fg = b, a end
-            local mask = 0
-            for bit = 0, 4 do
-                if distance(palette[six[bit+1]], palette[fg]) < distance(palette[six[bit+1]], palette[bg]) then mask = mask + 2^bit end
-            end
-            chars[#chars+1] = string.char(128+mask)
-            foregrounds[#foregrounds+1], backgrounds[#backgrounds+1] = digits:sub(fg+1,fg+1), digits:sub(bg+1,bg+1)
-        end
-        term.setCursorPos(x,y+row); term.blit(table.concat(chars),table.concat(foregrounds),table.concat(backgrounds))
-    end
-end
-
-local function getResponse(url, headers, binary)
-    if not next(thumbnailRequests) then return http.get(url, headers, binary) end
-    local response
-    -- Refresh/source validation and playback also wait for HTTP events. Keep
-    -- closing thumbnail responses even when those consumers own the event loop.
-    parallel.waitForAny(function()
-        response = table.pack(http.get(url, headers, binary))
-    end, function()
-        while true do handleThumbnailEvent(table.pack(os.pullEvent())) end
-    end)
-    return table.unpack(response, 1, response.n)
-end
-
 -- Fetch each page, including asset pages, so the library grows without edits.
 local function cataloguePages(url)
     local items = {}
     while url do
-        local response, message, failed = getResponse(url, {
+        local response, message, failed = http.get(url, {
             ["Accept"] = "application/vnd.github+json",
             ["User-Agent"] = "Craftoria-Video-Player",
         })
@@ -514,8 +223,7 @@ local function loadLibrary(source)
             if not seen[video.url] then
                 seen[video.url] = true
                 videos[#videos + 1] = { title = video.title:gsub("[%c]", " "), url = video.url,
-                    size = video.size, release = "R2", thumbnail = type(video.thumbnail) == "string"
-                        and #video.thumbnail <= 2048 and video.thumbnail:match("^https://[^/]+/") and video.thumbnail or nil }
+                    size = video.size, release = "R2" }
             end
         end
         table.sort(videos, function(a, b) return a.title:lower() < b.title:lower() end)
@@ -564,7 +272,7 @@ local function play(path, onStart)
     outputs = selectOutputs()
     speaker = outputs[1] and outputs[1].device
     if path:match "^https?://" then
-        local response, message, failed = getResponse(path, nil, true)
+        local response, message, failed = http.get(path, nil, true)
         if failed then failed.close() end
         file = assert(response, message or "Could not download video")
     else
@@ -952,7 +660,11 @@ local function menu()
             status, statusColor = "Selection not saved: " .. failure, colors.orange
         end
     end
-    local palette = menuPalette
+    local palette = {
+        {colors.black, 0x14151D}, {colors.gray, 0x343642}, {colors.blue, 0x29364A},
+        {colors.lightGray, 0xABABBB}, {colors.white, 0xEEEEF3}, {colors.cyan, 0x5DD6DF},
+        {colors.green, 0x54B89B}, {colors.orange, 0xF1B562}, {colors.red, 0xD26A75},
+    }
     local function chooseMenuScale()
         if activeMonitor then
             local requested = tonumber(config.scale) or 1
@@ -1015,7 +727,6 @@ local function menu()
         local ok, result = pcall(loadLibrary)
         if ok then
             videos, selected, page = result, 1, 1
-            for key, entry in pairs(thumbnailCache) do if not entry.image then thumbnailCache[key] = nil end end
             status = #videos == 0 and "No published videos. Tap REFRESH after uploading."
                 or ("Library updated. " .. #videos .. (#videos == 1 and " video." or " videos."))
             statusColor = colors.lightGray
@@ -1163,9 +874,6 @@ local function menu()
                     end
                     for count = 2, 4 do if w - 4 >= 18 * count + 2 * (count - 1) then options[#options + 1] = count end end
                     draft.columns = cycle(options, draft.columns, direction); changed()
-                end)
-                row("THUMBNAILS", draft.thumbnails and "ON" or "OFF", "Small previews load in the background", function()
-                    draft.thumbnails = not draft.thumbnails; changed()
                 end)
                 row("CONNECTED DISPLAYS", "RESCAN", #discoveredMonitors .. " advanced monitors", rescanAction)
             elseif tab == 3 then
@@ -1392,7 +1100,6 @@ local function menu()
         else status, statusColor = "Last video unavailable; showing library.", colors.orange end
     end
     while true do
-        advanceThumbnails(videos)
         setDisplayScale(menuScale)
         local width, height = term.getSize()
         if width < 36 or height < 12 then error("Menu needs at least 36 columns and 12 rows. Use a larger Advanced Monitor.", 0) end
@@ -1404,7 +1111,6 @@ local function menu()
         local cardWidth = math.floor((availableWidth - gap * (columns - 1)) / columns)
         local availableHeight = contentEnd - contentY + 1
         local rows = math.max(1, math.floor((availableHeight + 1) / (roomy and 7 or 5)))
-        if config.thumbnails then rows = math.min(rows, math.floor(THUMBNAIL_CACHE / columns)) end
         local cardHeight = math.min(7, math.floor((availableHeight - rows + 1) / rows))
         local capacity = columns * rows
         local pages = math.max(1, math.ceil(#videos / capacity))
@@ -1446,24 +1152,8 @@ local function menu()
             local toggleColor = excluded[video.url] and colors.gray or colors.green
             fill(toggleX, y, 5, toggleHeight, toggleColor)
             center(toggleX, y, 5, excluded[video.url] and "OUT" or "IN", excluded[video.url] and colors.lightGray or colors.black, toggleColor)
-            local titleX, titleWidth = x + 2, cardWidth - 4
-            local contentHeight = math.max(1, cardHeight - toggleHeight - 1)
-            if config.thumbnails and video.thumbnail and contentHeight >= 2 and cardWidth >= 18 then
-                local thumbWidth = math.min(12, math.floor((cardWidth - 4) * 0.45))
-                local key = thumbnailKey(video)
-                local cached = thumbnailCache[key]
-                if cached and cached.image then
-                    thumbnailClock = thumbnailClock + 1; cached.used = thumbnailClock
-                    drawThumbnail(cached.image, x+2, y+toggleHeight, thumbWidth, contentHeight)
-                else
-                    fill(x+2, y+toggleHeight, thumbWidth, contentHeight, colors.black)
-                    center(x+2, y+toggleHeight+math.floor((contentHeight-1)/2), thumbWidth,
-                        cached and "--" or "...", colors.lightGray, colors.black)
-                end
-                titleX, titleWidth = x + 3 + thumbWidth, cardWidth - 5 - thumbWidth
-            end
-            for line, text in ipairs(titleLines(video.title, titleWidth, contentHeight)) do
-                writeAt(titleX, y + toggleHeight + line - 1, text, colors.white, colors.gray)
+            for line, text in ipairs(titleLines(video.title, cardWidth - 4, math.max(1, cardHeight - toggleHeight - 1))) do
+                writeAt(x + 2, y + toggleHeight + line - 1, text, colors.white, colors.gray)
             end
             local footerY = y + cardHeight - 1
             fill(x + 1, footerY, cardWidth - 1, 1, colors.blue)
@@ -1507,9 +1197,6 @@ local function menu()
         local shortcuts = width >= 60 and " | Enter/L | P all | X in/out | S settings | R/Q" or " | Enter/L | P all | X in/out | S"
         center(1, height, width, "Page " .. page .. "/" .. pages .. shortcuts, colors.lightGray)
 
-        if cardHeight - (cardHeight >= 6 and 2 or 1) - 1 >= 2 and cardWidth >= 18 then
-            requestThumbnails(videos, first, math.min(#videos, first+capacity-1))
-        end
         local event, a, b, c = inputEvent()
         local action, chosen
         if event == "key" then
